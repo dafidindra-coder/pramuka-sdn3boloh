@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Login — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<main class="login">
+  <img src="cikal.png" alt="Logo Pramuka Siaga">
+  <h1>Administrasi Kepramukaan</h1>
+  <p class="muted">SDN 3 Boloh · Gudep 05.093 Putra &amp; 05.122 Putri</p>
+  <form id="form" class="card" style="margin-top:18px">
+    <label for="nis">NIS / NIP</label>
+    <input id="nis" inputmode="numeric" autocomplete="username" required>
+    <label for="pw">Kata sandi</label>
+    <input id="pw" type="password" autocomplete="current-password" required>
+    <div id="pesan" class="err" hidden></div>
+    <button class="btn" id="tombol" style="margin-top:14px">Masuk</button>
+  </form>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body></html>

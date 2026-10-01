@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Absensi — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <h1>Absensi mingguan</h1>
+  <label for="tgl">Tanggal latihan</label><input type="date" id="tgl">
+  <div id="daftar" style="margin-top:12px"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina']); if(!p) return;
+  const tgl=document.getElementById('tgl'), box=document.getElementById('daftar');
+  tgl.value=hariIni();
+  const siswa=await ambilSiswa(p);
+  const STATUS=[['H','Hadir'],['S','Sakit'],['I','Izin'],['A','Alfa']];
+
+  async function muat(){
+    box.innerHTML='<p class="muted">Memuat…</p>';
+    const {data}=await db.from('absensi_mingguan').select('siswa_id,status').eq('tanggal',tgl.value);
+    const peta=Object.fromEntries((data||[]).map(r=>[r.siswa_id,r.status]));
+    if(!siswa.length){box.innerHTML='<p class="muted">Belum ada siswa di Gudep ini.</p>';return}
+    box.innerHTML=siswa.map(s=>`<div class="card" data-id="${s.id}"><b>${s.nama}</b>
+      <div class="muted">${s.nis_nip}</div><div class="opsi">
+      ${STATUS.map(([k,t])=>`<button data-s="${k}" class="${peta[s.id]===k?'on':''}">${t}</button>`).join('')}</div></div>`).join('');
+  }
+  box.addEventListener('click',async e=>{
+    const b=e.target.closest('button[data-s]'); if(!b) return;
+    const kartu=b.closest('.card');
+    const {error}=await db.from('absensi_mingguan')
+      .upsert({siswa_id:kartu.dataset.id,tanggal:tgl.value,status:b.dataset.s},{onConflict:'siswa_id,tanggal'});
+    if(error) return toast('Gagal menyimpan: '+error.message);
+    kartu.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    toast('Tersimpan');
+  });
+  tgl.addEventListener('change',muat); muat();
+})();
+</script></body></html>

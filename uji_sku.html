@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Uji SKU — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <h1>Uji SKU</h1>
+  <label for="siswa">Pilih siswa</label><select id="siswa"></select>
+  <div id="daftar" style="margin-top:12px"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+/* GANTI dengan daftar materi SKU sesungguhnya (kode harus unik) */
+const MATERI_SKU=[
+  ['SKU-01','Hafal Dasadharma dan Trisatya'],
+  ['SKU-02','Bisa baris-berbaris dasar'],
+  ['SKU-03','Mengenal bendera Merah Putih'],
+  ['SKU-04','Membuat simpul dasar'],
+  ['SKU-05','Menyanyikan lagu wajib nasional']
+];
+(async()=>{
+  const p=await butuhLogin(['pembina']); if(!p) return;
+  const pilih=document.getElementById('siswa'), box=document.getElementById('daftar');
+  const siswa=await ambilSiswa(p);
+  pilih.innerHTML=siswa.map(s=>`<option value="${s.id}">${s.nama}</option>`).join('');
+
+  async function muat(){
+    const {data}=await db.from('pencapaian_sku').select('kode_sku,tanggal').eq('siswa_id',pilih.value);
+    const peta=Object.fromEntries((data||[]).map(r=>[r.kode_sku,r.tanggal]));
+    box.innerHTML=MATERI_SKU.map(([k,t])=>`<label class="card cek"><input type="checkbox" data-k="${k}" ${peta[k]?'checked':''}>
+      <span><b>${t}</b><br><span class="muted" id="t-${k}">${peta[k]?'Lulus '+peta[k]:'Belum lulus'}</span></span></label>`).join('');
+  }
+  box.addEventListener('change',async e=>{
+    const c=e.target, k=c.dataset.k, tgl=hariIni();
+    const q=c.checked
+      ? db.from('pencapaian_sku').upsert({siswa_id:pilih.value,kode_sku:k,tanggal:tgl,nip_penguji:p.nis_nip},{onConflict:'siswa_id,kode_sku'})
+      : db.from('pencapaian_sku').delete().eq('siswa_id',pilih.value).eq('kode_sku',k);
+    const {error}=await q;
+    if(error){c.checked=!c.checked;return toast('Gagal: '+error.message)}
+    document.getElementById('t-'+k).textContent=c.checked?'Lulus '+tgl:'Belum lulus';
+    toast('Tersimpan');
+  });
+  pilih.addEventListener('change',muat); if(siswa.length) muat();
+})();
+</script></body></html>

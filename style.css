@@ -1,0 +1,43 @@
+/* ===== Tema Pramuka: Khaki #d7ccc8 + Cokelat Tua #5d4037 ===== */
+:root{--khaki:#d7ccc8;--coklat:#5d4037;--coklat-tua:#3e2723;--kartu:#f5f0ee;--hijau:#2e7d32;--merah:#c62828;--kuning:#f9a825;--biru:#1565c0}
+*{box-sizing:border-box;margin:0}
+body{font-family:'Inter',Roboto,system-ui,sans-serif;background:var(--khaki);color:var(--coklat-tua);line-height:1.5;min-height:100vh}
+.nav{background:var(--coklat);color:#fff;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;position:sticky;top:0;z-index:10}
+.nav b{font-size:1rem}
+.nav .links{display:flex;gap:6px;flex-wrap:wrap}
+.nav a,.nav button{color:#fff;background:rgba(255,255,255,.14);border:0;border-radius:10px;padding:10px 14px;font:inherit;font-size:.9rem;text-decoration:none;min-height:44px;cursor:pointer}
+.nav a.aktif{background:#fff;color:var(--coklat);font-weight:600}
+main{max-width:900px;margin:0 auto;padding:14px}
+h1{font-size:1.3rem;margin:6px 0 12px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.card{background:var(--kartu);border:1px solid #bcaaa4;border-radius:14px;padding:14px;margin-bottom:12px}
+.grid .card{margin:0}
+.stat{font-size:1.9rem;font-weight:700;color:var(--coklat)}
+.muted{color:#6d4c41;font-size:.85rem}
+.btn{display:block;width:100%;background:var(--coklat);color:#fff;border:0;border-radius:12px;padding:14px;font:inherit;font-weight:600;min-height:48px;text-align:center;text-decoration:none;cursor:pointer}
+.btn:active{background:var(--coklat-tua)}
+input,select{width:100%;padding:13px;border:1.5px solid #a1887f;border-radius:12px;font:inherit;background:#fff;min-height:48px}
+label{display:block;font-weight:600;margin:10px 0 4px}
+.err{background:#ffcdd2;color:var(--merah);padding:10px;border-radius:10px;margin:10px 0;font-size:.9rem}
+.login{max-width:380px;margin:0 auto;padding:28px 16px;text-align:center}
+.login img{width:110px;height:110px;object-fit:contain}
+.login form{text-align:left}
+/* Absensi */
+.opsi{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.opsi button{border:1.5px solid #a1887f;background:#fff;border-radius:10px;padding:12px 0;font:inherit;font-size:.85rem;min-height:46px;cursor:pointer}
+.opsi button.on[data-s=H]{background:var(--hijau);color:#fff;border-color:var(--hijau)}
+.opsi button.on[data-s=S]{background:var(--kuning);color:#000;border-color:var(--kuning)}
+.opsi button.on[data-s=I]{background:var(--biru);color:#fff;border-color:var(--biru)}
+.opsi button.on[data-s=A]{background:var(--merah);color:#fff;border-color:var(--merah)}
+/* Iuran */
+.geser{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px;border:1px solid #bcaaa4;background:var(--kartu)}
+table{border-collapse:collapse;min-width:760px;width:100%}
+th,td{padding:6px;text-align:center;border-bottom:1px solid #d7ccc8;font-size:.8rem}
+th:first-child,td:first-child{position:sticky;left:0;background:var(--kartu);text-align:left;min-width:130px;font-weight:600;z-index:1}
+td.bln{width:52px;height:52px;cursor:pointer;background:#fff;border:2px solid var(--kartu)}
+td.bln.lunas{background:var(--hijau);color:#fff}
+/* SKU */
+.cek{display:flex;gap:12px;align-items:center;min-height:56px;cursor:pointer}
+.cek input{width:28px;height:28px;min-height:0;flex:none}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--coklat-tua);color:#fff;padding:10px 18px;border-radius:20px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:20}
+#toast.show{opacity:1}

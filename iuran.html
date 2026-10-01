@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Iuran — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <h1>Iuran bulanan</h1>
+  <label for="thn">Tahun</label><input type="number" id="thn">
+  <p class="muted" style="margin:10px 0">Geser ke samping. Ketuk bulan untuk menandai lunas.</p>
+  <div class="geser"><table id="tabel"></table></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina']); if(!p) return;
+  const thn=document.getElementById('thn'), tabel=document.getElementById('tabel');
+  thn.value=new Date().getFullYear();
+  const siswa=await ambilSiswa(p);
+  const NAMA=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+  async function muat(){
+    const {data}=await db.from('iuran_bulanan').select('*').eq('tahun',+thn.value);
+    const peta=Object.fromEntries((data||[]).map(r=>[r.siswa_id,r]));
+    tabel.innerHTML=`<tr><th>Nama</th>${NAMA.map(n=>`<th>${n}</th>`).join('')}</tr>`+
+      siswa.map(s=>`<tr data-id="${s.id}"><td>${s.nama}</td>${BULAN.map(b=>
+        `<td class="bln ${peta[s.id]?.[b]?'lunas':''}" data-b="${b}">${peta[s.id]?.[b]?'✓':''}</td>`).join('')}</tr>`).join('');
+  }
+  tabel.addEventListener('click',async e=>{
+    const td=e.target.closest('td.bln'); if(!td) return;
+    const nilai=!td.classList.contains('lunas');
+    td.classList.toggle('lunas',nilai); td.textContent=nilai?'✓':'';   // tampil dulu, batalkan jika gagal
+    const {error}=await db.from('iuran_bulanan')
+      .upsert({siswa_id:td.parentElement.dataset.id,tahun:+thn.value,[td.dataset.b]:nilai},{onConflict:'siswa_id,tahun'});
+    if(error){td.classList.toggle('lunas',!nilai);td.textContent=nilai?'':'✓';toast('Gagal: '+error.message)}
+  });
+  thn.addEventListener('change',muat); muat();
+})();
+</script></body></html>
