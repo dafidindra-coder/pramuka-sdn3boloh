@@ -1,8 +1,8 @@
 /* ============ KONFIGURASI SUPABASE — UBAH DI SINI ============ */
-const SUPABASE_URL = 'https://XXXXXXXX.supabase.co';   // Project URL (Settings > API)
-const SUPABASE_ANON_KEY = 'ISI_ANON_PUBLIC_KEY';        // anon public key (JANGAN pakai service_role!)
+const SUPABASE_URL = 'https://onlkxfqdaiwnbcezieqr.supabase.co/rest/v1/';   // Project URL (Settings > API)
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ubGt4ZnFkYWl3bmJjZXppZXFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MTUwMzQsImV4cCI6MjEwNjA5MTAzNH0.g-Htf1JWx37c2V6PPMhP5gvZuExTXRQO8snIydZzH28';        // anon public key (JANGAN pakai service_role!)
 const DOMAIN_EMAIL = '@sdn3boloh.sch.id';               // ditambahkan otomatis ke NIS/NIP
-const IURAN_PER_BULAN = 2000;                           // nominal iuran (Rp) untuk hitung kas
+const IURAN_PER_BULAN = 5000;                           // nominal iuran (Rp) untuk hitung kas
 /* ============================================================== */
 /* Asumsi skema (sesuaikan bila nama kolom Anda berbeda):
    profil_pengguna: id(uuid=auth.uid), nis_nip, nama, role('mabigus'|'pembina'|'siswa'), gudep('05.093'|'05.122')
