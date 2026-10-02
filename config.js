@@ -1,5 +1,5 @@
 /* ============ KONFIGURASI SUPABASE — UBAH DI SINI ============ */
-const SUPABASE_URL = 'https://rdilqnpfbszwvktzmxts.supabase.co/rest/v1/';   // Project URL (Settings > API)
+const SUPABASE_URL = 'https://rdilqnpfbszwvktzmxts.supabase.co';   // Project URL (Settings > API)
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkaWxxbnBmYnN6d3ZrdHpteHRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjY1MTksImV4cCI6MjEwNjQ0MjUxOX0.bms1zT5TLBfJY3jSro2msGegaQ3ZsPAElB86M7X79nI';        // anon public key (JANGAN pakai service_role!)
 const DOMAIN_EMAIL = '@sdn3boloh.sch.id';               // ditambahkan otomatis ke NIS/NIP
 const IURAN_PER_BULAN = 5000;                           // nominal iuran (Rp) untuk hitung kas
