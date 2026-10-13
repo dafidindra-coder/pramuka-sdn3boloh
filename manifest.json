@@ -1,0 +1,14 @@
+{
+  "name": "Pramuka SDN 3 Boloh",
+  "short_name": "Pramuka",
+  "description": "Administrasi kepramukaan Gudep 05.093 dan 05.122",
+  "lang": "id",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#d7ccc8",
+  "theme_color": "#5d4037",
+  "icons": [
+    {"src": "ikon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "ikon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}

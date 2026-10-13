@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="id"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
 <title>Uji SKU — Pramuka SDN 3 Boloh</title>
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -8,42 +10,60 @@
 <header id="nav"></header>
 <main>
   <h1>Uji SKU</h1>
-  <label for="siswa">Pilih siswa</label><select id="siswa"></select>
-  <div id="daftar" style="margin-top:12px"></div>
+  <div>
+    <label for="siswa">Pilih siswa</label>
+    <div style="display:flex;gap:8px">
+      <button class="btn kedua kecil" id="sebelum" type="button" aria-label="Siswa sebelumnya">‹</button>
+      <select id="siswa" style="flex:1;min-width:0"></select>
+      <button class="btn kedua kecil" id="sesudah" type="button" aria-label="Siswa berikutnya">›</button>
+    </div>
+  </div>
+  <div id="profil"></div>
+  <div id="daftar" style="display:flex;flex-direction:column;gap:10px"></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="sku.js"></script>
 <script>
-/* GANTI dengan daftar materi SKU sesungguhnya (kode harus unik) */
-const MATERI_SKU=[
-  ['SKU-01','Hafal Dasadharma dan Trisatya'],
-  ['SKU-02','Bisa baris-berbaris dasar'],
-  ['SKU-03','Mengenal bendera Merah Putih'],
-  ['SKU-04','Membuat simpul dasar'],
-  ['SKU-05','Menyanyikan lagu wajib nasional']
-];
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
-  const pilih=document.getElementById('siswa'), box=document.getElementById('daftar');
+  const pilih=document.getElementById('siswa'), box=document.getElementById('daftar'), profil=document.getElementById('profil');
   const siswa=await ambilSiswa(p);
-  pilih.innerHTML=siswa.map(s=>`<option value="${s.id}">${s.nama}</option>`).join('');
+  if(!siswa.length){box.innerHTML='<div class="kosong"><b>Belum ada siswa di Gudep ini</b><span>Tambahkan siswa di menu <a href="anggota.html">Anggota</a>.</span></div>';return}
+  pilih.innerHTML=siswa.map(s=>`<option value="${esc(s.id)}">${esc(s.nama)}</option>`).join('');
+  const awal=new URLSearchParams(location.search).get('siswa'); if(awal&&siswa.some(s=>s.id===awal)) pilih.value=awal;
+  let tanggal={};
 
+  function kepalaTingkat(t){
+    const total=MATERI_SKU[t].length, n=MATERI_SKU[t].filter(([k])=>tanggal[k]).length, penuh=n===total;
+    return `<div class="baris"><b>${esc(TINGKAT[t])}</b><span>${penuh?'<span class="pil hijau">Siap dilantik</span> ':''}<span class="muted">${n}/${total}</span></span></div>
+      <div class="progres ${penuh?'penuh':''}"><i style="width:${n/total*100}%"></i></div>`;
+  }
   async function muat(){
-    const {data}=await db.from('pencapaian_sku').select('kode_sku,tanggal').eq('siswa_id',pilih.value);
-    const peta=Object.fromEntries((data||[]).map(r=>[r.kode_sku,r.tanggal]));
-    box.innerHTML=MATERI_SKU.map(([k,t])=>`<label class="card cek"><input type="checkbox" data-k="${k}" ${peta[k]?'checked':''}>
-      <span><b>${t}</b><br><span class="muted" id="t-${k}">${peta[k]?'Lulus '+peta[k]:'Belum lulus'}</span></span></label>`).join('');
+    const s=siswa.find(x=>x.id===pilih.value), tk=s.tingkat||'mula';
+    profil.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pil">${esc(TINGKAT[tk])}</span>${s.kelas?`<span class="pil">Kelas ${esc(s.kelas)}</span>`:''}${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}</div>`;
+    box.innerHTML='<div class="kerangka"></div>';
+    const {data,error}=await db.from('pencapaian_sku').select('kode_sku,tanggal').eq('siswa_id',pilih.value);
+    if(error){tampilError(box,'Data SKU gagal dimuat',error);return}
+    tanggal=Object.fromEntries(data.map(r=>[r.kode_sku,r.tanggal]));
+    box.innerHTML=URUT_TINGKAT.map(t=>`<details class="tingkat" data-t="${t}" ${t===tk?'open':''}><summary>${kepalaTingkat(t)}</summary>
+      ${MATERI_SKU[t].map(([k,teks])=>`<label class="cek"><input type="checkbox" data-k="${k}" ${tanggal[k]?'checked':''}>
+      <span><b>${esc(teks)}</b><br><span class="muted" id="t-${k}">${tanggal[k]?'Lulus '+esc(tglPendek(tanggal[k])):'Belum lulus'}</span></span></label>`).join('')}</details>`).join('');
   }
   box.addEventListener('change',async e=>{
-    const c=e.target, k=c.dataset.k, tgl=hariIni();
+    const c=e.target, k=c.dataset.k, tgl=hariIni(); if(!k) return;
     const q=c.checked
       ? db.from('pencapaian_sku').upsert({siswa_id:pilih.value,kode_sku:k,tanggal:tgl,nip_penguji:p.nis_nip},{onConflict:'siswa_id,kode_sku'})
       : db.from('pencapaian_sku').delete().eq('siswa_id',pilih.value).eq('kode_sku',k);
     const {error}=await q;
     if(error){c.checked=!c.checked;return toast('Gagal: '+error.message)}
-    document.getElementById('t-'+k).textContent=c.checked?'Lulus '+tgl:'Belum lulus';
+    if(c.checked) tanggal[k]=tgl; else delete tanggal[k];
+    document.getElementById('t-'+k).textContent=c.checked?'Lulus '+tglPendek(tgl):'Belum lulus';
+    const d=c.closest('details'); d.querySelector('summary').innerHTML=kepalaTingkat(d.dataset.t);
     toast('Tersimpan');
   });
-  pilih.addEventListener('change',muat); if(siswa.length) muat();
+  const geser=n=>{const i=pilih.selectedIndex+n;if(i>=0&&i<siswa.length){pilih.selectedIndex=i;muat()}};
+  document.getElementById('sebelum').onclick=()=>geser(-1); document.getElementById('sesudah').onclick=()=>geser(1);
+  pilih.addEventListener('change',muat); muat();
 })();
 </script></body></html>

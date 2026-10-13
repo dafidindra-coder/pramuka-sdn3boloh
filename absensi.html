@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="id"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
 <title>Absensi — Pramuka SDN 3 Boloh</title>
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -8,36 +10,57 @@
 <header id="nav"></header>
 <main>
   <h1>Absensi mingguan</h1>
-  <label for="tgl">Tanggal latihan</label><input type="date" id="tgl">
-  <div id="daftar" style="margin-top:12px"></div>
+  <div><label for="tgl">Tanggal latihan</label><input type="date" id="tgl"></div>
+  <div class="ringkas" id="ringkas" aria-live="polite"></div>
+  <button class="btn kedua" id="semua-hadir" type="button" hidden>Tandai semua yang belum diisi: Hadir</button>
+  <div id="daftar" style="display:flex;flex-direction:column;gap:10px"></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
-  const tgl=document.getElementById('tgl'), box=document.getElementById('daftar');
+  const tgl=document.getElementById('tgl'), box=document.getElementById('daftar'), ringkas=document.getElementById('ringkas'), semua=document.getElementById('semua-hadir');
   tgl.value=hariIni();
   const siswa=await ambilSiswa(p);
   const STATUS=[['H','Hadir'],['S','Sakit'],['I','Izin'],['A','Alfa']];
+  let peta={};
 
-  async function muat(){
-    box.innerHTML='<p class="muted">Memuat…</p>';
-    const {data}=await db.from('absensi_mingguan').select('siswa_id,status').eq('tanggal',tgl.value);
-    const peta=Object.fromEntries((data||[]).map(r=>[r.siswa_id,r.status]));
-    if(!siswa.length){box.innerHTML='<p class="muted">Belum ada siswa di Gudep ini.</p>';return}
-    box.innerHTML=siswa.map(s=>`<div class="card" data-id="${s.id}"><b>${s.nama}</b>
-      <div class="muted">${s.nis_nip}</div><div class="opsi">
-      ${STATUS.map(([k,t])=>`<button data-s="${k}" class="${peta[s.id]===k?'on':''}">${t}</button>`).join('')}</div></div>`).join('');
+  function perbaruiRingkas(){
+    const n={H:0,S:0,I:0,A:0}; siswa.forEach(s=>{if(peta[s.id])n[peta[s.id]]++});
+    const belum=siswa.length-Object.values(n).reduce((a,b)=>a+b,0);
+    ringkas.innerHTML=`<span class="pil hijau">H ${n.H}</span><span class="pil kuning">S ${n.S}</span><span class="pil">I ${n.I}</span><span class="pil merah">A ${n.A}</span>
+      <span class="pil" style="background:none;border:1px dashed var(--garis-kuat)">Belum diisi ${belum}</span>`;
+    semua.hidden=!belum;
   }
+  async function muat(){
+    box.innerHTML='<div class="kerangka"></div><div class="kerangka"></div>';
+    const {data,error}=await db.from('absensi_mingguan').select('siswa_id,status').eq('tanggal',tgl.value);
+    if(error){tampilError(box,'Absensi gagal dimuat',error);return}
+    peta=Object.fromEntries(data.map(r=>[r.siswa_id,r.status]));
+    if(!siswa.length){box.innerHTML='<div class="kosong"><b>Belum ada siswa di Gudep ini</b><span>Tambahkan siswa di menu <a href="anggota.html">Anggota</a>.</span></div>';ringkas.innerHTML='';semua.hidden=true;return}
+    box.innerHTML=siswa.map(s=>`<div class="card" data-id="${esc(s.id)}"><div class="siswa-kepala"><div><b>${esc(s.nama)}</b>
+      <div class="muted">${esc(s.nis_nip)}${s.kelas?' · Kelas '+esc(s.kelas):''}</div></div>${s.barung?`<span class="pil">${esc(s.barung)}</span>`:''}</div><div class="opsi" role="group" aria-label="Status ${esc(s.nama)}">
+      ${STATUS.map(([k,t])=>`<button type="button" data-s="${k}" class="${peta[s.id]===k?'on':''}" aria-pressed="${peta[s.id]===k}">${t}</button>`).join('')}</div></div>`).join('');
+    perbaruiRingkas();
+  }
+  function tandai(kartu,s){kartu.querySelectorAll('button[data-s]').forEach(x=>{const on=x.dataset.s===s;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)})}
+
   box.addEventListener('click',async e=>{
     const b=e.target.closest('button[data-s]'); if(!b) return;
-    const kartu=b.closest('.card');
-    const {error}=await db.from('absensi_mingguan')
-      .upsert({siswa_id:kartu.dataset.id,tanggal:tgl.value,status:b.dataset.s},{onConflict:'siswa_id,tanggal'});
+    const kartu=b.closest('.card'), id=kartu.dataset.id;
+    const {error}=await db.from('absensi_mingguan').upsert({siswa_id:id,tanggal:tgl.value,status:b.dataset.s},{onConflict:'siswa_id,tanggal'});
     if(error) return toast('Gagal menyimpan: '+error.message);
-    kartu.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
-    toast('Tersimpan');
+    peta[id]=b.dataset.s; tandai(kartu,b.dataset.s); perbaruiRingkas(); toast('Tersimpan');
+  });
+  semua.addEventListener('click',async()=>{
+    const belum=siswa.filter(s=>!peta[s.id]); if(!belum.length) return;
+    semua.disabled=true;
+    const {error}=await db.from('absensi_mingguan').upsert(belum.map(s=>({siswa_id:s.id,tanggal:tgl.value,status:'H'})),{onConflict:'siswa_id,tanggal'});
+    semua.disabled=false;
+    if(error) return toast('Gagal menyimpan: '+error.message);
+    belum.forEach(s=>{peta[s.id]='H';tandai(box.querySelector(`.card[data-id="${CSS.escape(s.id)}"]`),'H')});
+    perbaruiRingkas(); toast(`${belum.length} siswa ditandai Hadir`);
   });
   tgl.addEventListener('change',muat); muat();
 })();

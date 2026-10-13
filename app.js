@@ -1,4 +1,6 @@
 // Halaman login
+if(new URLSearchParams(location.search).get('e')==='profil'){const m=document.getElementById('pesan');
+  m.textContent='Akun ini belum punya data profil. Minta pembina atau admin melengkapinya.';m.hidden=false}
 (async()=>{ const {data:{session}}=await db.auth.getSession(); if(session) location.href='dashboard.html'; })();
 document.getElementById('form').addEventListener('submit', async e=>{
   e.preventDefault();
