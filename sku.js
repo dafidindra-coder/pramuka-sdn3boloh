@@ -1,6 +1,6 @@
 /* Daftar SKU Siaga per tingkatan.
-   CONTOH — samakan dengan buku SKU Siaga resmi yang dipakai Gudep. Kode harus unik dan jangan diubah
-   setelah dipakai, karena pencapaian siswa disimpan berdasarkan kode. */
+   Sumber utama: tabel materi_sku (bisa diubah di menu SKU > Kelola butir).
+   Daftar di bawah hanya cadangan bila tabel belum dibuat — CONTOH, samakan dengan buku SKU resmi. */
 const MATERI_SKU = {
   mula: [
     ['M-01','Taat menjalankan ibadah agamanya'],
@@ -40,7 +40,23 @@ const MATERI_SKU = {
   ]
 };
 const URUT_TINGKAT = ['mula','bantu','tata'];
+const TINGKAT_BERIKUT = {mula:'bantu',bantu:'tata',tata:null};
+
+/* Muat butir SKU aktif dari database ke MATERI_SKU. Kembalikan semua baris (termasuk nonaktif) untuk halaman kelola. */
+async function muatMateriSku(){
+  const {data,error}=await db.from('materi_sku').select('*').order('urutan');
+  if(error||!data?.length) return {dariDb:false,error,semua:[]};
+  URUT_TINGKAT.forEach(t=>{MATERI_SKU[t]=data.filter(r=>r.tingkat===t&&r.aktif!==false).map(r=>[r.kode,r.uraian])});
+  return {dariDb:true,semua:data};
+}
 /* Progres per tingkat dari himpunan kode yang sudah lulus */
 const progresSku = lulus => Object.fromEntries(URUT_TINGKAT.map(t=>{
   const n=MATERI_SKU[t].filter(([k])=>lulus.has(k)).length; return [t,{lulus:n,total:MATERI_SKU[t].length}];
 }));
+const skuPenuh = pr => pr.total>0 && pr.lulus===pr.total;
+const lebarPersen = pr => pr.total ? pr.lulus/pr.total*100 : 0;
+/* Siap dilantik = semua butir tingkatan yang sedang ditempuh sudah lulus, dan tingkatan itu belum dilantik */
+function statusSiswaSku(s, lulus){
+  const tk=s.tingkat||'mula', pr=progresSku(lulus);
+  return {tk, pr, siap: skuPenuh(pr[tk]) && s.tingkat_dilantik!==tk};
+}

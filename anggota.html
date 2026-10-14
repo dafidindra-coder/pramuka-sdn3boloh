@@ -9,6 +9,7 @@
 </head><body>
 <header id="nav"></header>
 <main>
+  <nav id="subnav"></nav>
   <div class="kepala-bagian"><h1>Anggota</h1><button class="btn kecil" id="tambah" type="button">+ Tambah siswa</button></div>
   <div class="baris-form">
     <div><label for="cari">Cari</label><input id="cari" type="search" placeholder="Nama atau NIS…"></div>
@@ -29,8 +30,8 @@
     </div>
     <label for="f-nama">Nama lengkap</label><input id="f-nama" required maxlength="80">
     <div class="baris-form">
-      <div><label for="f-tingkat">Tingkatan</label><select id="f-tingkat"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></select></div>
-      <div><label for="f-barung">Barung</label><input id="f-barung" maxlength="20" placeholder="mis. Merah"></div>
+      <div><label for="f-tingkat">SKU yang ditempuh</label><select id="f-tingkat"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></select></div>
+      <div><label for="f-barung">Barung</label><input id="f-barung" maxlength="20" placeholder="mis. Merah" list="daftar-barung"><datalist id="daftar-barung"></datalist></div>
     </div>
     <label for="f-hp">No. HP orang tua</label><input id="f-hp" type="tel" inputmode="tel" maxlength="16" placeholder="08…">
     <div id="baris-sandi"><label for="f-sandi">Kata sandi awal</label><input id="f-sandi" minlength="6" autocomplete="new-password" placeholder="minimal 6 karakter">
@@ -47,12 +48,14 @@
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
   const $=id=>document.getElementById(id);
+  subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung'],['pelantikan.html','Pelantikan']]);
   const box=$('daftar'), dlg=$('dlg');
   let siswa=[], edit=null;
 
   async function muat(){
     box.innerHTML='<div class="kerangka"></div><div class="kerangka"></div>';
     siswa=await ambilSiswa(p,{termasukNonaktif:true}); gambar();
+    $('daftar-barung').innerHTML=[...new Set(siswa.map(s=>s.barung).filter(Boolean))].sort().map(b=>`<option value="${esc(b)}">`).join('');
   }
   function gambar(){
     const q=$('cari').value.trim().toLowerCase(), f=$('saring').value;
@@ -62,7 +65,7 @@
     box.innerHTML=list.length?list.map(s=>`<div class="card"><div class="siswa-kepala"><div><b>${esc(s.nama)}</b>
         <div class="muted">NIS ${esc(s.nis_nip)}${s.kelas?' · Kelas '+esc(s.kelas):''}</div></div>
         <button class="btn kedua kecil" data-edit="${esc(s.id)}" type="button">Ubah</button></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="pil">${esc(TINGKAT[s.tingkat||'mula'])}</span>${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}${s.aktif===false?'<span class="pil merah">Nonaktif</span>':''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${s.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[s.tingkat_dilantik].replace('Siaga ',''))}</span>`:''}<span class="pil">${esc(TINGKAT[s.tingkat||'mula'])}</span>${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}${s.aktif===false?'<span class="pil merah">Nonaktif</span>':''}</div>
       <div class="muted" style="margin-top:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>HP ortu: ${s.hp_ortu?`<b style="user-select:all">${esc(s.hp_ortu)}</b>`:'—'}</span>
         <a href="uji_sku.html?siswa=${encodeURIComponent(s.id)}">Buka SKU ›</a></div></div>`).join('')
       :'<div class="kosong"><b>Tidak ada siswa</b><span>Ubah pencarian atau saringan, atau tambah siswa baru.</span></div>';
@@ -92,21 +95,16 @@
         if(error) throw error;
       }else{
         // Akun login dibuat oleh Edge Function (memakai service_role di server, bukan di browser)
-        const {data:hasil,error}=await db.functions.invoke('buat-siswa',{body:{...data,nis:$('f-nis').value.trim(),kata_sandi:$('f-sandi').value}});
-        if(error){ // ambil pesan dari fungsi (mis. "NIS ini sudah punya akun.")
-          let m=error.message; try{const j=await error.context.json(); m=j.error||(error.context.status===404?'not found':m)}catch(_){}
-          throw new Error(m);
-        }
-        if(hasil?.error) throw new Error(hasil.error);
+        await buatAkun({...data,role:'siswa',nis:$('f-nis').value.trim(),kata_sandi:$('f-sandi').value});
       }
       dlg.close(); toast(edit?'Data siswa diperbarui':'Siswa ditambahkan'); muat();
     }catch(err){
-      pesan.textContent=/failed to send|not found|404/i.test(err.message||'')
-        ? 'Fungsi "buat-siswa" belum dipasang di Supabase. Lihat supabase/functions/buat-siswa.'
-        : 'Gagal menyimpan: '+err.message;
+      pesan.textContent='Gagal menyimpan: '+err.message;
       pesan.hidden=false;
     }finally{tombol.disabled=false;tombol.textContent='Simpan'}
   });
-  muat();
+  await muat();
+  if(location.hash==='#tambah') buka();
+  else if(location.hash.startsWith('#ubah-')){const s=siswa.find(x=>x.id===decodeURIComponent(location.hash.slice(6)));if(s)buka(s)}
 })();
 </script></body></html>

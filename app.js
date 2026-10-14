@@ -1,6 +1,8 @@
 // Halaman login
-if(new URLSearchParams(location.search).get('e')==='profil'){const m=document.getElementById('pesan');
-  m.textContent='Akun ini belum punya data profil. Minta pembina atau admin melengkapinya.';m.hidden=false}
+{const e=new URLSearchParams(location.search).get('e'), m=document.getElementById('pesan');
+  const t={profil:'Akun ini belum punya data profil. Minta pembina atau admin melengkapinya.',
+    nonaktif:'Akun ini sudah dinonaktifkan. Hubungi mabigus atau pembina bila ini keliru.'}[e];
+  if(t){m.textContent=t;m.hidden=false}}
 (async()=>{ const {data:{session}}=await db.auth.getSession(); if(session) location.href='dashboard.html'; })();
 document.getElementById('form').addEventListener('submit', async e=>{
   e.preventDefault();

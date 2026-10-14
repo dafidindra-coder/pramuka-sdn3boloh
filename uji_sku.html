@@ -9,6 +9,7 @@
 </head><body>
 <header id="nav"></header>
 <main>
+  <nav id="subnav"></nav>
   <h1>Uji SKU</h1>
   <div>
     <label for="siswa">Pilih siswa</label>
@@ -28,20 +29,23 @@
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
   const pilih=document.getElementById('siswa'), box=document.getElementById('daftar'), profil=document.getElementById('profil');
-  const siswa=await ambilSiswa(p);
+  subNav(document.getElementById('subnav'),[['uji_sku.html','Uji siswa'],['kelola_sku.html','Kelola butir SKU']]);
+  const [siswa]=await Promise.all([ambilSiswa(p),muatMateriSku()]);
   if(!siswa.length){box.innerHTML='<div class="kosong"><b>Belum ada siswa di Gudep ini</b><span>Tambahkan siswa di menu <a href="anggota.html">Anggota</a>.</span></div>';return}
   pilih.innerHTML=siswa.map(s=>`<option value="${esc(s.id)}">${esc(s.nama)}</option>`).join('');
   const awal=new URLSearchParams(location.search).get('siswa'); if(awal&&siswa.some(s=>s.id===awal)) pilih.value=awal;
   let tanggal={};
 
   function kepalaTingkat(t){
-    const total=MATERI_SKU[t].length, n=MATERI_SKU[t].filter(([k])=>tanggal[k]).length, penuh=n===total;
-    return `<div class="baris"><b>${esc(TINGKAT[t])}</b><span>${penuh?'<span class="pil hijau">Siap dilantik</span> ':''}<span class="muted">${n}/${total}</span></span></div>
-      <div class="progres ${penuh?'penuh':''}"><i style="width:${n/total*100}%"></i></div>`;
+    const s=siswa.find(x=>x.id===pilih.value), pr={total:MATERI_SKU[t].length,lulus:MATERI_SKU[t].filter(([k])=>tanggal[k]).length}, penuh=skuPenuh(pr);
+    const dilantik=s.tingkat_dilantik&&URUT_TINGKAT.indexOf(t)<=URUT_TINGKAT.indexOf(s.tingkat_dilantik);
+    const label=dilantik?'<span class="pil hijau">Sudah dilantik</span> ':penuh?'<span class="pil kuning">Siap dilantik</span> ':'';
+    return `<div class="baris"><b>${esc(TINGKAT[t])}</b><span>${label}<span class="muted">${pr.lulus}/${pr.total}</span></span></div>
+      <div class="progres ${penuh?'penuh':''}"><i style="width:${lebarPersen(pr)}%"></i></div>`;
   }
   async function muat(){
     const s=siswa.find(x=>x.id===pilih.value), tk=s.tingkat||'mula';
-    profil.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pil">${esc(TINGKAT[tk])}</span>${s.kelas?`<span class="pil">Kelas ${esc(s.kelas)}</span>`:''}${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}</div>`;
+    profil.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap">${s.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[s.tingkat_dilantik].replace('Siaga ',''))}</span>`:''}<span class="pil">Menempuh ${esc(TINGKAT[tk])}</span>${s.kelas?`<span class="pil">Kelas ${esc(s.kelas)}</span>`:''}${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}</div>`;
     box.innerHTML='<div class="kerangka"></div>';
     const {data,error}=await db.from('pencapaian_sku').select('kode_sku,tanggal').eq('siswa_id',pilih.value);
     if(error){tampilError(box,'Data SKU gagal dimuat',error);return}
@@ -60,7 +64,9 @@
     if(c.checked) tanggal[k]=tgl; else delete tanggal[k];
     document.getElementById('t-'+k).textContent=c.checked?'Lulus '+tglPendek(tgl):'Belum lulus';
     const d=c.closest('details'); d.querySelector('summary').innerHTML=kepalaTingkat(d.dataset.t);
-    toast('Tersimpan');
+    const s=siswa.find(x=>x.id===pilih.value);
+    if(d.dataset.t===(s.tingkat||'mula')&&c.checked&&statusSiswaSku(s,new Set(Object.keys(tanggal))).siap) toast('Semua butir lulus. Ajukan pelantikan di menu Anggota › Pelantikan');
+    else toast('Tersimpan');
   });
   const geser=n=>{const i=pilih.selectedIndex+n;if(i>=0&&i<siswa.length){pilih.selectedIndex=i;muat()}};
   document.getElementById('sebelum').onclick=()=>geser(-1); document.getElementById('sesudah').onclick=()=>geser(1);

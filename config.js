@@ -45,6 +45,7 @@ async function butuhLogin(roleBoleh){
   const {data:p,error} = await db.from('profil_pengguna').select('*').eq('id',session.user.id).single();
   // Akun tanpa profil: keluar (dulu ini mengarah ke dashboard.html lagi dan berputar tanpa henti)
   if(error||!p){await db.auth.signOut();location.href='index.html?e=profil';return null}
+  if(p.aktif===false){await db.auth.signOut();location.href='index.html?e=nonaktif';return null}
   if(roleBoleh&&!roleBoleh.includes(p.role)){location.href='dashboard.html';return null}
   renderNav(p);return p;
 }
@@ -55,6 +56,9 @@ const IKON={
   iuran:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',
   sku:'<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>',
   anggota:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.9.7 3.1 2.4 3.5 5.2"/>',
+  pembina:'<circle cx="12" cy="7" r="3.5"/><path d="M5 21c.6-4 3.3-6.5 7-6.5s6.4 2.5 7 6.5M12 14.5l-1.6 3 1.6 3.5 1.6-3.5z"/>',
+  barung:'<path d="M5 21V3M5 4h12l-3 4 3 4H5"/>',
+  pelantikan:'<circle cx="12" cy="9" r="5"/><path d="M9 13.5 7.5 21l4.5-2.5 4.5 2.5-1.5-7.5M12 6.5l.8 1.6 1.7.2-1.2 1.2.3 1.7-1.6-.8-1.6.8.3-1.7-1.2-1.2 1.7-.2z"/>',
   rekap:'<path d="M5 20V10M12 20V4M19 20v-7"/>',
   keluar:'<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h10"/>'
 };
@@ -64,19 +68,43 @@ function renderNav(p){
   const hal=location.pathname.split('/').pop()||'index.html';
   const menu={
     pembina:[['dashboard.html','Beranda','beranda'],['absensi.html','Absen','absen'],['iuran.html','Iuran','iuran'],['uji_sku.html','SKU','sku'],['anggota.html','Anggota','anggota']],
-    mabigus:[['dashboard.html','Beranda','beranda'],['rekap.html','Rekap','rekap']],
+    mabigus:[['dashboard.html','Beranda','beranda'],['pembina.html','Pembina','pembina'],['barung.html','Barung','barung'],['pelantikan.html','Pelantikan','pelantikan'],['rekap.html','Rekap','rekap']],
     siswa:[]
   }[p.role]||[];
+  // Halaman turunan menyalakan menu induknya (mis. Barung & Pelantikan ada di bawah Anggota untuk pembina)
+  const induk=p.role==='pembina'?({'barung.html':'anggota.html','pelantikan.html':'anggota.html','kelola_sku.html':'uji_sku.html','rekap.html':'dashboard.html'}[hal]||hal)
+    :({'kelola_sku.html':'dashboard.html'}[hal]||hal);
   const n=document.getElementById('nav');
   n.className='atas';
-  n.innerHTML=`<img src="cikal.png" alt="" class="logo-kecil"><div class="judul-app"><b>Pramuka SDN 3 Boloh</b><span>${esc(p.nama)} · ${esc({mabigus:'Mabigus',pembina:'Pembina',siswa:'Siswa'}[p.role])}</span></div>
+  n.innerHTML=`<img src="logo.png" alt="" class="logo-kecil"><div class="judul-app"><b>Pramuka SDN 3 Boloh</b><span>${esc(p.nama)} · ${esc({mabigus:'Mabigus',pembina:'Pembina',siswa:'Siswa'}[p.role])}</span></div>
     <button id="keluar" class="tombol-ikon" aria-label="Keluar">${ikon('keluar')}</button>`;
   document.getElementById('keluar').onclick=async()=>{await db.auth.signOut();location.href='index.html'};
   if(menu.length>1){
     const b=document.createElement('nav');b.className='bawah';b.setAttribute('aria-label','Menu utama');
-    b.innerHTML=menu.map(([h,t,i])=>`<a href="${h}" class="${h===hal?'aktif':''}" ${h===hal?'aria-current="page"':''}>${ikon(i)}<span>${t}</span></a>`).join('');
+    b.innerHTML=menu.map(([h,t,i])=>`<a href="${h}" class="${h===induk?'aktif':''}" ${h===hal?'aria-current="page"':''}>${ikon(i)}<span>${t}</span></a>`).join('');
     document.body.append(b);document.body.classList.add('ada-menu');
   }
+  // Siluet tunas kelapa sebagai hiasan latar
+  if(!document.querySelector('.siluet')){const d=document.createElement('div');d.className='siluet';d.setAttribute('aria-hidden','true');document.body.prepend(d)}
+}
+
+/* Tab kecil di atas halaman yang berkelompok, mis. Anggota · Barung · Pelantikan */
+function subNav(el,items){
+  const hal=location.pathname.split('/').pop();
+  el.className='subnav';el.setAttribute('aria-label','Sub menu');
+  el.innerHTML=items.map(([h,t])=>`<a href="${h}" class="${h===hal?'aktif':''}" ${h===hal?'aria-current="page"':''}>${t}</a>`).join('');
+}
+
+/* Membuat akun login lewat Edge Function "buat-akun" (service_role hanya ada di server) */
+async function buatAkun(body){
+  const {data,error}=await db.functions.invoke('buat-akun',{body});
+  if(error){
+    let m=error.message; try{const j=await error.context.json(); m=j.error||(error.context.status===404?'not found':m)}catch(_){}
+    if(/failed to send|not found|404/i.test(m)) m='Fungsi "buat-akun" belum dipasang di Supabase. Lihat supabase/functions/buat-akun.';
+    throw new Error(m);
+  }
+  if(data?.error) throw new Error(data.error);
+  return data;
 }
 
 /* Daftar siswa yang boleh dikelola: Pembina -> hanya Gudep-nya. Siswa nonaktif disembunyikan kecuali diminta. */

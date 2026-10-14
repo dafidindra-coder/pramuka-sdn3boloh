@@ -8,13 +8,16 @@
   const siswa = p.role==='siswa' ? [p] : await ambilSiswa(p);
   const ids = siswa.map(s=>s.id);
   const kosong = {data:[],error:null};
-  const [abs,iur,sku,klr,agd] = await Promise.all([
+  const [abs,iur,sku,klr,agd,ajuan] = await Promise.all([
     ids.length?db.from('absensi_mingguan').select('siswa_id,tanggal,status').in('siswa_id',ids):kosong,
     ids.length?db.from('iuran_bulanan').select('*').in('siswa_id',ids):kosong,
     ids.length?db.from('pencapaian_sku').select('siswa_id,kode_sku,tanggal').in('siswa_id',ids):kosong,
     p.role==='siswa'?kosong:(p.role==='pembina'?db.from('kas_keluar').select('gudep,jumlah').eq('gudep',p.gudep):db.from('kas_keluar').select('gudep,jumlah')),
-    db.from('agenda').select('*').gte('tanggal',hariIni()).order('tanggal')
+    db.from('agenda').select('*').gte('tanggal',hariIni()).order('tanggal'),
+    db.from('pengajuan_pelantikan').select('*').eq('status','menunggu'),
+    muatMateriSku()
   ]);
+  const menunggu=ajuan.error?[]:ajuan.data;   // tabel belum dibuat -> anggap kosong
   if(abs.error||iur.error||sku.error){ tampilError(isi,'Data Beranda gagal dimuat',abs.error||iur.error||sku.error); return; }
 
   /* ---------- Perhitungan ---------- */
@@ -30,7 +33,8 @@
     const keluar=(klr.data||[]).filter(r=>gudepSet.has(r.gudep)).reduce((n,r)=>n+(r.jumlah||0),0);
     const s=sku.data.filter(r=>idSet.has(r.siswa_id));
     const lulusPer=id=>new Set(s.filter(r=>r.siswa_id===id).map(r=>r.kode_sku));
-    const siap=daftar.filter(x=>{const pr=progresSku(lulusPer(x.id))[x.tingkat||'mula'];return pr&&pr.lulus===pr.total}).length;
+    const siapList=daftar.filter(x=>statusSiswaSku(x,lulusPer(x.id)).siap&&!menunggu.some(m=>m.siswa_id===x.id));
+    const siap=siapList.length;
     // Perlu perhatian: alfa >= 2 dari 4 latihan terakhir, atau menunggak >= 3 bulan tahun ini
     const empatTerakhir=tanggal.slice(-4);
     const perhatian=[];
@@ -47,13 +51,14 @@
       if(alasan.length) perhatian.push({x,alasan});
     });
     return {total:a.length,hadir,pct:a.length?Math.round(hadir/a.length*100):0,seri,masuk:lunas*IURAN_PER_BULAN,keluar,
-      lunas,skuN:s.length,siap,perhatian};
+      lunas,skuN:s.length,siap,siapList,perhatian};
   }
 
   const grafik=seri=>seri.length?`<div class="grafik" role="img" aria-label="Persentase hadir ${seri.length} latihan terakhir">${seri.map((d,i)=>
     `<div class="kolom" title="${tglPanjang(d.t)}: ${d.pct}% hadir">${i===seri.length-1?`<em>${d.pct}%</em>`:''}<i style="height:${Math.max(d.pct,2)}%"></i><span>${tglPendek(d.t)}</span></div>`).join('')}</div>`
     :'<p class="muted" style="margin-top:8px">Belum ada absensi.</p>';
 
+  const ubin=(href,ik,judul,info='')=>`<a class="ubin" href="${href}">${ikon(ik)}<span><b>${judul}</b>${info?`<small>${info}</small>`:''}</span></a>`;
   const daftarPerhatian=list=>list.length
     ?`<ul class="daftar">${list.map(({x,alasan})=>`<li><div><b>${esc(x.nama)}</b><div class="muted">${esc(x.kelas?'Kelas '+x.kelas+' · ':'')}${esc(namaGudep(x.gudep))}</div></div><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">${alasan.join('')}</div></li>`).join('')}</ul>`
     :'<p class="muted">Tidak ada. Semua siswa rajin hadir dan iurannya lancar.</p>';
@@ -99,7 +104,14 @@
         ${kartu('Saldo kas',rupiah(h.masuk-h.keluar),`Masuk ${rupiah(h.masuk)} · Keluar ${rupiah(h.keluar)}`)}
         ${kartu('SKU lulus',h.skuN,h.siap?`<span class="pil hijau">${h.siap} siap dilantik</span>`:'butir materi')}
       </div>
-      <div class="aksi"><a class="btn" href="absensi.html">Absen hari ini</a><a class="btn kedua" href="rekap.html">Rekap &amp; ekspor</a></div>
+      <a class="btn" href="absensi.html">${ikon('absen')} Absen hari ini</a>
+      <div class="ubin-grid">
+        ${ubin('anggota.html#tambah','anggota','Tambah siswa','atau ubah data siswa')}
+        ${ubin('barung.html','barung','Barung',`${new Set(siswa.map(s=>s.barung).filter(Boolean)).size} barung`)}
+        ${ubin('pelantikan.html','pelantikan','Pelantikan',menunggu.length?`${menunggu.length} menunggu mabigus`:h.siap?`${h.siap} siap diajukan`:'ajukan &amp; pantau')}
+        ${ubin('kelola_sku.html','sku','Butir SKU','tambah &amp; ubah kecakapan')}
+        ${ubin('rekap.html','rekap','Rekap','unduh &amp; cetak')}
+      </div>
       <section class="card"><h2>Kehadiran 8 latihan terakhir</h2>${grafik(h.seri)}</section>
       <section class="card"><div class="kepala-bagian"><h2>Perlu perhatian</h2><span class="pil ${h.perhatian.length?'merah':'hijau'}">${h.perhatian.length} siswa</span></div><div style="margin-top:6px">${daftarPerhatian(h.perhatian)}</div></section>
       ${bagianAgenda()}`;
@@ -107,12 +119,19 @@
     const per=Object.keys(GUDEP).map(g=>({g,daftar:siswa.filter(s=>s.gudep===g)})).map(o=>({...o,h:hitung(o.daftar)}));
     const semua=hitung(siswa);
     isi.innerHTML=`<div><div class="label">Mabigus · semua Gudep</div><h1>${esc(p.nama)}</h1></div>
+      ${menunggu.length?`<a class="sorotan" href="pelantikan.html">${ikon('pelantikan')}<span><b>${menunggu.length} pengajuan pelantikan menunggu persetujuan</b><small>Ketuk untuk memeriksa dan memutuskan</small></span><span aria-hidden="true">›</span></a>`:''}
+      <div class="ubin-grid">
+        ${ubin('pembina.html','pembina','Pembina','tambah &amp; ubah')}
+        ${ubin('barung.html','barung','Barung',`${new Set(siswa.filter(s=>s.barung).map(s=>s.gudep+'|'+s.barung)).size} barung`)}
+        ${ubin('pelantikan.html','pelantikan','Pelantikan',menunggu.length?`${menunggu.length} menunggu`:'tidak ada antrean')}
+        ${ubin('kelola_sku.html','sku','Butir SKU','tambah &amp; ubah')}
+      </div>
       <div class="grid lebar">${per.map(({g,daftar,h})=>`<section class="card"><div class="kepala-bagian"><h2>${esc(namaGudep(g))}</h2></div>
         <div class="stat">${h.pct}%</div><div class="muted">kehadiran · ${daftar.length} siswa</div>
         <div class="progres" style="margin:8px 0 10px"><i style="width:${h.pct}%"></i></div>
         <ul class="daftar"><li><span class="muted">Saldo kas</span><b>${rupiah(h.masuk-h.keluar)}</b></li><li><span class="muted">SKU lulus</span><b>${h.skuN} butir</b></li>
         <li><span class="muted">Siap dilantik</span><b>${h.siap} siswa</b></li><li><span class="muted">Perlu perhatian</span><b>${h.perhatian.length} siswa</b></li></ul></section>`).join('')}</div>
-      <a class="btn" href="rekap.html">Lihat rekap lengkap</a>
+      <a class="btn kedua" href="rekap.html">${ikon('rekap')} Lihat rekap lengkap</a>
       <section class="card"><h2>Kehadiran 8 latihan terakhir (gabungan)</h2>${grafik(semua.seri)}</section>
       <section class="card"><div class="kepala-bagian"><h2>Perlu perhatian</h2><span class="pil ${semua.perhatian.length?'merah':'hijau'}">${semua.perhatian.length} siswa</span></div><div style="margin-top:6px">${daftarPerhatian(semua.perhatian)}</div></section>
       ${bagianAgenda()}`;
@@ -121,17 +140,20 @@
     const hadir=a.filter(r=>r.status==='H').length, pct=a.length?Math.round(hadir/a.length*100):0;
     const r=iur.data.find(r=>r.tahun===tahun)||{};
     const lunas=BULAN.filter(b=>r[b]).length, kurang=BULAN.slice(0,bulanIni+1).filter(b=>!r[b]).length;
-    const lulus=new Set(sku.data.map(x=>x.kode_sku)), pr=progresSku(lulus), tk=p.tingkat||'mula';
+    const lulus=new Set(sku.data.map(x=>x.kode_sku)), {tk,pr,siap}=statusSiswaSku(p,lulus);
+    const ajuanSaya=menunggu.find(m=>m.siswa_id===p.id);
     const STATUS={H:['Hadir','hijau'],S:['Sakit','kuning'],I:['Izin',''],A:['Alfa','merah']};
     isi.innerHTML=`<section class="card"><div class="label">${esc(namaGudep(p.gudep))}${p.kelas?' · Kelas '+esc(p.kelas):''}</div><h1>${esc(p.nama)}</h1>
-        <div style="margin-top:6px"><span class="pil">${esc(TINGKAT[tk])}</span>${p.barung?` <span class="pil">Barung ${esc(p.barung)}</span>`:''}</div></section>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${p.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[p.tingkat_dilantik])}</span>`:'<span class="pil">Calon Siaga</span>'}
+          ${p.tingkat_dilantik!==tk?`<span class="pil">Menempuh SKU ${esc(TINGKAT[tk].replace('Siaga ',''))}</span>`:''}${p.barung?`<span class="pil">Barung ${esc(p.barung)}</span>`:''}</div>
+        ${ajuanSaya?`<p class="info" style="margin-top:10px">Pelantikan ${esc(TINGKAT[ajuanSaya.tingkat])} sudah diajukan pembina dan menunggu persetujuan mabigus.</p>`:''}</section>
       <div class="grid">${kartu('Kehadiran',pct+'%',`${hadir} dari ${a.length} latihan`)}${kartu('Iuran '+tahun,lunas+'/12',kurang?`<span class="pil kuning">kurang ${kurang} bulan</span>`:'<span class="pil hijau">lancar</span>')}
-        ${kartu('SKU '+TINGKAT[tk].replace('Siaga ',''),`${pr[tk].lulus}/${pr[tk].total}`,pr[tk].lulus===pr[tk].total?'<span class="pil hijau">siap dilantik</span>':'butir lulus')}</div>
+        ${kartu('SKU '+TINGKAT[tk].replace('Siaga ',''),`${pr[tk].lulus}/${pr[tk].total}`,siap?'<span class="pil hijau">siap dilantik</span>':'butir lulus')}</div>
       <section class="card"><h2>Iuran ${tahun}</h2><div class="bulan12">${BULAN.map((b,i)=>`<span class="${r[b]?'lunas':i<=bulanIni?'telat':''}" title="${NAMA_BULAN[i]}: ${r[b]?'lunas':'belum'}">${NAMA_BULAN[i]}</span>`).join('')}</div>
         <p class="muted" style="margin-top:8px">Hijau = lunas · garis merah = belum dibayar</p></section>
       <section class="card"><h2>Kecakapan (SKU)</h2><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${URUT_TINGKAT.map(t=>`<div>
         <div class="kepala-bagian" style="margin:0 0 4px"><span>${esc(TINGKAT[t])}</span><span class="muted">${pr[t].lulus}/${pr[t].total}</span></div>
-        <div class="progres ${pr[t].lulus===pr[t].total?'penuh':''}"><i style="width:${pr[t].lulus/pr[t].total*100}%"></i></div></div>`).join('')}</div>
+        <div class="progres ${skuPenuh(pr[t])?'penuh':''}"><i style="width:${lebarPersen(pr[t])}%"></i></div></div>`).join('')}</div>
         <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Lihat butir ${esc(TINGKAT[tk])}</summary><ul class="daftar" style="margin-top:6px">${MATERI_SKU[tk].map(([k,t])=>
           `<li><span>${esc(t)}</span>${lulus.has(k)?'<span class="pil hijau">✓ Lulus</span>':'<span class="pil">Belum</span>'}</li>`).join('')}</ul></details></section>
       <section class="card"><h2>Riwayat latihan</h2>${a.length?`<ul class="daftar" style="margin-top:6px">${a.slice(0,8).map(x=>
