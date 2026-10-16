@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Anggota — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <nav id="subnav"></nav>
+  <div class="kepala-bagian"><h1>Anggota</h1><button class="btn kecil" id="tambah" type="button">+ Tambah siswa</button></div>
+  <div class="baris-form">
+    <div><label for="cari">Cari</label><input id="cari" type="search" placeholder="Nama atau NIS…"></div>
+    <div><label for="saring">Tampilkan</label><select id="saring">
+      <option value="aktif">Siswa aktif</option><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option>
+      <option value="tata">Siaga Tata</option><option value="nonaktif">Nonaktif / lulus</option></select></div>
+  </div>
+  <p class="muted" id="jumlah"></p>
+  <div id="daftar" style="display:flex;flex-direction:column;gap:10px"></div>
+</main>
+
+<dialog id="dlg" aria-labelledby="dlg-judul">
+  <form id="form" method="dialog">
+    <h2 id="dlg-judul">Tambah siswa</h2>
+    <div class="baris-form">
+      <div><label for="f-nis">NIS</label><input id="f-nis" inputmode="numeric" required pattern="[0-9]+" title="Hanya angka"></div>
+      <div><label for="f-kelas">Kelas</label><input id="f-kelas" maxlength="5" placeholder="mis. 3A"></div>
+    </div>
+    <label for="f-nama">Nama lengkap</label><input id="f-nama" required maxlength="80">
+    <div class="baris-form">
+      <div><label for="f-tingkat">SKU yang ditempuh</label><select id="f-tingkat"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></select></div>
+      <div><label for="f-barung">Barung</label><input id="f-barung" maxlength="20" placeholder="mis. Merah" list="daftar-barung"><datalist id="daftar-barung"></datalist></div>
+    </div>
+    <label for="f-hp">No. HP orang tua</label><input id="f-hp" type="tel" inputmode="tel" maxlength="16" placeholder="08…">
+    <div id="baris-sandi"><label for="f-sandi">Kata sandi awal</label><input id="f-sandi" minlength="6" autocomplete="new-password" placeholder="minimal 6 karakter">
+      <p class="muted" style="margin-top:4px">Siswa masuk dengan NIS dan kata sandi ini.</p></div>
+    <label class="cek" id="baris-aktif" style="border:0;padding:8px 0"><input type="checkbox" id="f-aktif"> <span>Masih aktif (hapus centang bila sudah lulus/pindah)</span></label>
+    <div id="f-pesan" class="err" hidden></div>
+    <div class="tombol-dialog"><button class="btn kedua" type="button" id="batal">Batal</button><button class="btn" id="simpan">Simpan</button></div>
+  </form>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina']); if(!p) return;
+  const $=id=>document.getElementById(id);
+  subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung'],['pelantikan.html','Pelantikan']]);
+  const box=$('daftar'), dlg=$('dlg');
+  let siswa=[], edit=null;
+
+  async function muat(){
+    box.innerHTML='<div class="kerangka"></div><div class="kerangka"></div>';
+    siswa=await ambilSiswa(p,{termasukNonaktif:true}); gambar();
+    $('daftar-barung').innerHTML=[...new Set(siswa.map(s=>s.barung).filter(Boolean))].sort().map(b=>`<option value="${esc(b)}">`).join('');
+  }
+  function gambar(){
+    const q=$('cari').value.trim().toLowerCase(), f=$('saring').value;
+    const list=siswa.filter(s=>(f==='nonaktif'?s.aktif===false:s.aktif!==false&&(f==='aktif'||(s.tingkat||'mula')===f))
+      &&(s.nama.toLowerCase().includes(q)||String(s.nis_nip).includes(q)));
+    $('jumlah').textContent=`${list.length} siswa · ${namaGudep(p.gudep)}`;
+    box.innerHTML=list.length?list.map(s=>`<div class="card"><div class="siswa-kepala"><div><b>${esc(s.nama)}</b>
+        <div class="muted">NIS ${esc(s.nis_nip)}${s.kelas?' · Kelas '+esc(s.kelas):''}</div></div>
+        <button class="btn kedua kecil" data-edit="${esc(s.id)}" type="button">Ubah</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${s.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[s.tingkat_dilantik].replace('Siaga ',''))}</span>`:''}<span class="pil">${esc(TINGKAT[s.tingkat||'mula'])}</span>${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}${s.aktif===false?'<span class="pil merah">Nonaktif</span>':''}</div>
+      <div class="muted" style="margin-top:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>HP ortu: ${s.hp_ortu?`<b style="user-select:all">${esc(s.hp_ortu)}</b>`:'—'}</span>
+        <a href="uji_sku.html?siswa=${encodeURIComponent(s.id)}">Buka SKU ›</a></div></div>`).join('')
+      :'<div class="kosong"><b>Tidak ada siswa</b><span>Ubah pencarian atau saringan, atau tambah siswa baru.</span></div>';
+  }
+  function buka(s){
+    edit=s||null;
+    $('dlg-judul').textContent=s?'Ubah data siswa':'Tambah siswa';
+    $('f-nis').value=s?.nis_nip||''; $('f-nis').disabled=!!s;
+    $('f-nama').value=s?.nama||''; $('f-kelas').value=s?.kelas||''; $('f-tingkat').value=s?.tingkat||'mula';
+    $('f-barung').value=s?.barung||''; $('f-hp').value=s?.hp_ortu||''; $('f-aktif').checked=s?s.aktif!==false:true;
+    $('baris-sandi').hidden=!!s; $('f-sandi').required=!s; $('f-sandi').value=''; $('baris-aktif').hidden=!s;
+    $('f-pesan').hidden=true; dlg.showModal(); $(s?'f-nama':'f-nis').focus();
+  }
+  $('tambah').onclick=()=>buka();
+  $('batal').onclick=()=>dlg.close();
+  box.addEventListener('click',e=>{const b=e.target.closest('[data-edit]');if(b)buka(siswa.find(s=>s.id===b.dataset.edit))});
+  $('cari').oninput=gambar; $('saring').onchange=gambar;
+
+  $('form').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const tombol=$('simpan'), pesan=$('f-pesan'); tombol.disabled=true; tombol.textContent='Menyimpan…'; pesan.hidden=true;
+    const data={nama:$('f-nama').value.trim(),kelas:$('f-kelas').value.trim()||null,tingkat:$('f-tingkat').value,
+      barung:$('f-barung').value.trim()||null,hp_ortu:$('f-hp').value.trim()||null};
+    try{
+      if(edit){
+        const {error}=await db.from('profil_pengguna').update({...data,aktif:$('f-aktif').checked}).eq('id',edit.id);
+        if(error) throw error;
+      }else{
+        // Akun login dibuat oleh Edge Function (memakai service_role di server, bukan di browser)
+        await buatAkun({...data,role:'siswa',nis:$('f-nis').value.trim(),kata_sandi:$('f-sandi').value});
+      }
+      dlg.close(); toast(edit?'Data siswa diperbarui':'Siswa ditambahkan'); muat();
+    }catch(err){
+      pesan.textContent='Gagal menyimpan: '+err.message;
+      pesan.hidden=false;
+    }finally{tombol.disabled=false;tombol.textContent='Simpan'}
+  });
+  await muat();
+  if(location.hash==='#tambah') buka();
+  else if(location.hash.startsWith('#ubah-')){const s=siswa.find(x=>x.id===decodeURIComponent(location.hash.slice(6)));if(s)buka(s)}
+})();
+</script></body></html>

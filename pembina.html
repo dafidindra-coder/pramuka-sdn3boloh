@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Pembina — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <div class="kepala-bagian"><h1>Pembina</h1><button class="btn kecil" id="tambah" type="button">+ Tambah pembina</button></div>
+  <p class="muted" id="jumlah"></p>
+  <div id="daftar" style="display:flex;flex-direction:column;gap:10px"><div class="kerangka"></div></div>
+</main>
+
+<dialog id="dlg" aria-labelledby="dlg-judul">
+  <form id="form" method="dialog">
+    <h2 id="dlg-judul">Tambah pembina</h2>
+    <label for="f-nip">NIP</label><input id="f-nip" inputmode="numeric" required pattern="[0-9]+" title="Hanya angka" maxlength="20">
+    <label for="f-nama">Nama lengkap</label><input id="f-nama" required maxlength="80">
+    <div class="baris-form">
+      <div><label for="f-gudep">Gudep</label><select id="f-gudep"><option value="05.093">05.093 Putra</option><option value="05.122">05.122 Putri</option></select></div>
+      <div><label for="f-hp">No. HP</label><input id="f-hp" type="tel" inputmode="tel" maxlength="16" placeholder="08…"></div>
+    </div>
+    <div id="baris-sandi"><label for="f-sandi">Kata sandi awal</label><input id="f-sandi" minlength="6" autocomplete="new-password" placeholder="minimal 6 karakter">
+      <p class="muted" style="margin-top:4px">Pembina masuk dengan NIP dan kata sandi ini.</p></div>
+    <label class="cek" id="baris-aktif" style="border:0;padding:8px 0"><input type="checkbox" id="f-aktif"> <span>Masih aktif (hapus centang bila sudah tidak membina; akun tidak bisa masuk lagi)</span></label>
+    <div id="f-pesan" class="err" hidden></div>
+    <div class="tombol-dialog"><button class="btn kedua" type="button" id="batal">Batal</button><button class="btn" id="simpan">Simpan</button></div>
+  </form>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['mabigus']); if(!p) return;
+  const $=id=>document.getElementById(id), box=$('daftar'), dlg=$('dlg');
+  let pembina=[], jumlahSiswa={}, edit=null;
+
+  async function muat(){
+    const [pb,sw]=await Promise.all([
+      db.from('profil_pengguna').select('*').eq('role','pembina').order('nama'),
+      db.from('profil_pengguna').select('gudep,aktif').eq('role','siswa')]);
+    if(pb.error){tampilError(box,'Daftar pembina gagal dimuat',pb.error);return}
+    pembina=pb.data; jumlahSiswa={};
+    (sw.data||[]).filter(s=>s.aktif!==false).forEach(s=>jumlahSiswa[s.gudep]=(jumlahSiswa[s.gudep]||0)+1);
+    gambar();
+  }
+  function gambar(){
+    const aktif=pembina.filter(x=>x.aktif!==false).length;
+    $('jumlah').textContent=`${aktif} pembina aktif${pembina.length>aktif?` · ${pembina.length-aktif} nonaktif`:''}`;
+    box.innerHTML=pembina.length?Object.keys(GUDEP).map(g=>{const list=pembina.filter(x=>x.gudep===g);return `<section><h2 style="margin:6px 0 8px">${esc(namaGudep(g))} <span class="muted" style="font-weight:400">· ${jumlahSiswa[g]||0} siswa</span></h2>
+      <div style="display:flex;flex-direction:column;gap:10px">${list.length?list.map(x=>`<div class="card ${x.aktif===false?'redup':''}"><div class="siswa-kepala"><div><b>${esc(x.nama)}</b>
+        <div class="muted">NIP ${esc(x.nis_nip)}</div></div><button class="btn kedua kecil" data-edit="${esc(x.id)}" type="button">Ubah</button></div>
+        <div class="muted" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${x.aktif===false?'<span class="pil merah">Nonaktif</span>':'<span class="pil hijau">Aktif</span>'}
+          <span>HP: ${x.no_hp?`<b style="user-select:all">${esc(x.no_hp)}</b>`:'—'}</span></div></div>`).join('')
+        :'<div class="kosong"><b>Belum ada pembina</b><span>Tambahkan pembina untuk Gudep ini.</span></div>'}</div></section>`}).join('')
+      :'<div class="kosong"><b>Belum ada pembina</b></div>';
+  }
+  function buka(x){
+    edit=x||null;
+    $('dlg-judul').textContent=x?'Ubah data pembina':'Tambah pembina';
+    $('f-nip').value=x?.nis_nip||''; $('f-nip').disabled=!!x;
+    $('f-nama').value=x?.nama||''; $('f-gudep').value=x?.gudep||'05.093'; $('f-hp').value=x?.no_hp||'';
+    $('f-aktif').checked=x?x.aktif!==false:true; $('baris-aktif').hidden=!x;
+    $('baris-sandi').hidden=!!x; $('f-sandi').required=!x; $('f-sandi').value='';
+    $('f-pesan').hidden=true; dlg.showModal(); $(x?'f-nama':'f-nip').focus();
+  }
+  $('tambah').onclick=()=>buka(); $('batal').onclick=()=>dlg.close();
+  box.addEventListener('click',e=>{const b=e.target.closest('[data-edit]');if(b)buka(pembina.find(x=>x.id===b.dataset.edit))});
+  $('form').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const tombol=$('simpan'), pesan=$('f-pesan'); tombol.disabled=true; tombol.textContent='Menyimpan…'; pesan.hidden=true;
+    const data={nama:$('f-nama').value.trim(),gudep:$('f-gudep').value,no_hp:$('f-hp').value.trim()||null};
+    try{
+      if(edit){
+        const {error}=await db.from('profil_pengguna').update({...data,aktif:$('f-aktif').checked}).eq('id',edit.id);
+        if(error) throw error;
+      } else await buatAkun({...data,role:'pembina',nis:$('f-nip').value.trim(),kata_sandi:$('f-sandi').value});
+      dlg.close(); toast(edit?'Data pembina diperbarui':'Pembina ditambahkan'); muat();
+    }catch(err){pesan.textContent='Gagal menyimpan: '+err.message;pesan.hidden=false}
+    finally{tombol.disabled=false;tombol.textContent='Simpan'}
+  });
+  muat();
+})();
+</script></body></html>
