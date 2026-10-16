@@ -8,15 +8,11 @@ Aplikasi administrasi kepramukaan SDN 3 Boloh (Gudep 05.093 Putra & 05.122 Putri
 - **Siswa**: kehadiran, iuran, tingkatan, dan progres SKU miliknya sendiri.
 
 ## Pemasangan di Supabase (sekali saja)
-1. **Skema baru**: buka Supabase > SQL Editor, tempel isi `supabase/perubahan_skema.sql`, lalu Run.
-   Ini menambah kolom anggota, tabel `kas_keluar`, `agenda`, `materi_sku`, `pengajuan_pelantikan`,
-   fungsi `putuskan_pelantikan`, serta aturan aksesnya (RLS).
-2. **Fungsi buat akun**: pasang Edge Function agar pembina bisa membuat akun siswa dan mabigus bisa membuat akun pembina:
-   ```
-   supabase functions deploy buat-akun
-   ```
-   Fungsi ini memakai `service_role` di server, jadi kunci rahasia tidak pernah ada di browser.
-3. **Butir SKU**: isi awal di database masih contoh. Sesuaikan dengan buku SKU Siaga resmi lewat menu SKU › Kelola butir SKU.
+Ikuti **[supabase/PANDUAN.md](supabase/PANDUAN.md)** langkah demi langkah. Ringkasnya:
+1. Jalankan `supabase/perubahan_skema.sql` di SQL Editor (struktur tabel + aturan akses).
+2. Buat user mabigus di Authentication, lalu jalankan `supabase/akun_pertama.sql`.
+3. Deploy Edge Function `buat-akun` (`supabase/functions/buat-akun/index.ts`).
+4. Matikan pendaftaran umum, periksa kunci di `config.js`, lalu terbitkan lewat GitHub Pages.
 
 ## Alur pelantikan golongan
 Pembina mencentang butir SKU siswa → setelah semua butir tingkatannya lulus, siswa muncul di Anggota › Pelantikan →

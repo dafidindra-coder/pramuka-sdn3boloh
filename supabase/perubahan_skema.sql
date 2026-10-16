@@ -1,39 +1,89 @@
 -- =====================================================================
--- Perubahan skema untuk fitur baru (Anggota, SKU per tingkat, Kas keluar, Agenda)
--- Jalankan sekali di Supabase: Dashboard > SQL Editor > New query > tempel > Run.
--- Aman dijalankan ulang. Periksa bagian RLS bila kebijakan Anda yang lama berbeda.
+-- DATABASE APLIKASI PRAMUKA SDN 3 BOLOH
+-- Jalankan di Supabase: Dashboard > SQL Editor > New query > tempel seluruh isi file ini > Run.
+--
+-- Aman dijalankan berulang kali, dan aman untuk database yang sudah berisi data:
+--   - tabel yang sudah ada tidak dihapus, hanya ditambah kolom yang belum ada;
+--   - aturan akses (RLS) buatan file ini dihapus lalu dibuat ulang dengan nama yang sama.
+-- Setelah selesai, lanjutkan dengan supabase/akun_pertama.sql untuk membuat akun mabigus pertama.
 -- =====================================================================
 
--- 1. Kolom baru di profil_pengguna
+-- ---------------------------------------------------------------------
+-- 1. Tabel dasar (dibuat hanya bila belum ada)
+-- ---------------------------------------------------------------------
+create table if not exists public.profil_pengguna (
+  id       uuid primary key references auth.users(id) on delete cascade,
+  nis_nip  text not null unique,
+  nama     text not null,
+  role     text not null check (role in ('mabigus','pembina','siswa')),
+  gudep    text check (gudep is null or gudep in ('05.093','05.122'))
+);
+
+create table if not exists public.absensi_mingguan (
+  id       bigint generated always as identity primary key,
+  siswa_id uuid not null references public.profil_pengguna(id) on delete cascade,
+  tanggal  date not null,
+  status   text not null check (status in ('H','S','I','A'))
+);
+
+create table if not exists public.iuran_bulanan (
+  id       bigint generated always as identity primary key,
+  siswa_id uuid not null references public.profil_pengguna(id) on delete cascade,
+  tahun    integer not null
+);
+
+create table if not exists public.pencapaian_sku (
+  id          bigint generated always as identity primary key,
+  siswa_id    uuid not null references public.profil_pengguna(id) on delete cascade,
+  kode_sku    text not null,
+  tanggal     date not null default current_date,
+  nip_penguji text
+);
+
+-- ---------------------------------------------------------------------
+-- 2. Kolom tambahan (ditambah hanya bila belum ada)
+-- ---------------------------------------------------------------------
 alter table public.profil_pengguna
-  add column if not exists kelas   text,
-  add column if not exists tingkat text not null default 'mula',
-  add column if not exists barung  text,
-  add column if not exists hp_ortu text,
-  add column if not exists aktif   boolean not null default true;
+  add column if not exists kelas            text,
+  add column if not exists tingkat          text not null default 'mula',
+  add column if not exists tingkat_dilantik text,
+  add column if not exists barung           text,
+  add column if not exists hp_ortu          text,
+  add column if not exists no_hp            text,
+  add column if not exists aktif            boolean not null default true;
+
+alter table public.iuran_bulanan
+  add column if not exists jan boolean not null default false, add column if not exists feb boolean not null default false,
+  add column if not exists mar boolean not null default false, add column if not exists apr boolean not null default false,
+  add column if not exists mei boolean not null default false, add column if not exists jun boolean not null default false,
+  add column if not exists jul boolean not null default false, add column if not exists agu boolean not null default false,
+  add column if not exists sep boolean not null default false, add column if not exists okt boolean not null default false,
+  add column if not exists nov boolean not null default false, add column if not exists des boolean not null default false;
+
+-- Kolom bulan yang sudah ada dari versi lama: beri nilai bawaan "belum bayar"
+do $$ declare b text; begin
+  foreach b in array array['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'] loop
+    execute format('alter table public.iuran_bulanan alter column %I set default false', b);
+  end loop;
+end $$;
 
 do $$ begin
-  alter table public.profil_pengguna
-    add constraint profil_tingkat_valid check (tingkat in ('mula','bantu','tata'));
+  alter table public.profil_pengguna add constraint profil_tingkat_valid check (tingkat in ('mula','bantu','tata'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table public.profil_pengguna add constraint profil_tingkat_dilantik_valid
+    check (tingkat_dilantik is null or tingkat_dilantik in ('mula','bantu','tata'));
 exception when duplicate_object then null; end $$;
 
--- 2. Fungsi bantu untuk RLS (security definer agar tidak berputar saat membaca profil_pengguna)
-create or replace function public.peran_saya() returns text
-  language sql stable security definer set search_path = public
-  as $$ select role from public.profil_pengguna where id = auth.uid() $$;
+-- Kunci unik yang dipakai aplikasi saat menyimpan (upsert).
+-- Bila gagal karena data ganda, hapus dulu baris gandanya (lihat panduan).
+create unique index if not exists absensi_unik   on public.absensi_mingguan (siswa_id, tanggal);
+create unique index if not exists iuran_unik     on public.iuran_bulanan   (siswa_id, tahun);
+create unique index if not exists pencapaian_unik on public.pencapaian_sku  (siswa_id, kode_sku);
 
-create or replace function public.gudep_saya() returns text
-  language sql stable security definer set search_path = public
-  as $$ select gudep from public.profil_pengguna where id = auth.uid() $$;
-
--- 3. Pembina boleh mengubah data siswa di Gudep-nya sendiri (nama, kelas, tingkat, barung, HP, aktif)
-drop policy if exists "pembina ubah siswa gudepnya" on public.profil_pengguna;
-create policy "pembina ubah siswa gudepnya" on public.profil_pengguna
-  for update to authenticated
-  using      (public.peran_saya() = 'pembina' and role = 'siswa' and gudep = public.gudep_saya())
-  with check (public.peran_saya() = 'pembina' and role = 'siswa' and gudep = public.gudep_saya());
-
--- 4. Kas keluar (pengeluaran Gudep)
+-- ---------------------------------------------------------------------
+-- 3. Tabel fitur baru
+-- ---------------------------------------------------------------------
 create table if not exists public.kas_keluar (
   id          uuid primary key default gen_random_uuid(),
   gudep       text not null check (gudep in ('05.093','05.122')),
@@ -43,8 +93,145 @@ create table if not exists public.kas_keluar (
   dibuat_oleh uuid default auth.uid(),
   dibuat_pada timestamptz not null default now()
 );
-alter table public.kas_keluar enable row level security;
 
+create table if not exists public.agenda (
+  id          uuid primary key default gen_random_uuid(),
+  gudep       text check (gudep is null or gudep in ('05.093','05.122')),   -- kosong = semua Gudep
+  tanggal     date not null,
+  judul       text not null,
+  keterangan  text,
+  dibuat_oleh uuid default auth.uid(),
+  dibuat_pada timestamptz not null default now()
+);
+
+create table if not exists public.materi_sku (
+  kode    text primary key,
+  tingkat text not null check (tingkat in ('mula','bantu','tata')),
+  uraian  text not null,
+  urutan  integer not null default 0,
+  aktif   boolean not null default true
+);
+
+create table if not exists public.pengajuan_pelantikan (
+  id              uuid primary key default gen_random_uuid(),
+  siswa_id        uuid not null references public.profil_pengguna(id) on delete cascade,
+  gudep           text not null,
+  tingkat         text not null check (tingkat in ('mula','bantu','tata')),
+  status          text not null default 'menunggu' check (status in ('menunggu','disetujui','ditolak')),
+  catatan_pembina text,
+  catatan_mabigus text,
+  diajukan_oleh   uuid default auth.uid(),
+  diajukan_pada   timestamptz not null default now(),
+  diputus_oleh    uuid,
+  diputus_pada    timestamptz
+);
+create unique index if not exists pengajuan_satu_menunggu
+  on public.pengajuan_pelantikan (siswa_id, tingkat) where status = 'menunggu';
+
+-- ---------------------------------------------------------------------
+-- 4. Fungsi bantu untuk aturan akses
+--    (security definer agar tidak berputar saat membaca profil_pengguna)
+-- ---------------------------------------------------------------------
+create or replace function public.peran_saya() returns text
+  language sql stable security definer set search_path = public
+  as $$ select role from public.profil_pengguna where id = auth.uid() and aktif $$;
+
+create or replace function public.gudep_saya() returns text
+  language sql stable security definer set search_path = public
+  as $$ select gudep from public.profil_pengguna where id = auth.uid() and aktif $$;
+
+-- Gudep seorang siswa (null bila id itu bukan siswa)
+create or replace function public.gudep_siswa(p_siswa uuid) returns text
+  language sql stable security definer set search_path = public
+  as $$ select gudep from public.profil_pengguna where id = p_siswa and role = 'siswa' $$;
+
+-- Boleh mengelola data siswa ini? (pembina aktif di Gudep yang sama)
+create or replace function public.pembina_dari(p_siswa uuid) returns boolean
+  language sql stable security definer set search_path = public
+  as $$ select public.peran_saya() = 'pembina' and public.gudep_siswa(p_siswa) = public.gudep_saya() $$;
+
+-- Boleh melihat data siswa ini? (siswa itu sendiri, pembinanya, atau mabigus)
+create or replace function public.boleh_lihat_siswa(p_siswa uuid) returns boolean
+  language sql stable security definer set search_path = public
+  as $$ select p_siswa = auth.uid() or public.peran_saya() = 'mabigus' or public.pembina_dari(p_siswa) $$;
+
+-- Lindungi kolom penting: NIS/NIP dan peran tidak boleh diubah dari aplikasi,
+-- dan tingkatan yang sudah dilantik hanya berubah lewat persetujuan mabigus.
+create or replace function public.jaga_profil() returns trigger
+  language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return new; end if;   -- dari server (service_role / SQL Editor)
+  if new.id <> old.id or new.nis_nip <> old.nis_nip or new.role <> old.role then
+    raise exception 'NIS/NIP dan peran tidak boleh diubah dari aplikasi';
+  end if;
+  if new.tingkat_dilantik is distinct from old.tingkat_dilantik and public.peran_saya() is distinct from 'mabigus' then
+    raise exception 'Tingkatan yang sudah dilantik hanya bisa diubah lewat persetujuan mabigus';
+  end if;
+  return new;
+end $$;
+drop trigger if exists jaga_profil on public.profil_pengguna;
+create trigger jaga_profil before update on public.profil_pengguna
+  for each row execute function public.jaga_profil();
+
+-- ---------------------------------------------------------------------
+-- 5. Aturan akses (Row Level Security)
+--    Semua aturan LAMA pada 8 tabel ini dihapus dulu, karena aturan di Supabase digabung
+--    dengan "atau": satu aturan lama yang longgar (mis. "boleh baca semua") akan membuka
+--    data yang seharusnya tertutup. Aturan di bawah ini sudah mencakup semua kebutuhan aplikasi.
+-- ---------------------------------------------------------------------
+do $$ declare r record; begin
+  for r in select policyname, tablename from pg_policies
+           where schemaname = 'public' and tablename in ('profil_pengguna','absensi_mingguan','iuran_bulanan','pencapaian_sku',
+             'kas_keluar','agenda','materi_sku','pengajuan_pelantikan')
+  loop
+    execute format('drop policy %I on public.%I', r.policyname, r.tablename);
+  end loop;
+end $$;
+
+alter table public.profil_pengguna      enable row level security;
+alter table public.absensi_mingguan     enable row level security;
+alter table public.iuran_bulanan        enable row level security;
+alter table public.pencapaian_sku       enable row level security;
+alter table public.kas_keluar           enable row level security;
+alter table public.agenda               enable row level security;
+alter table public.materi_sku           enable row level security;
+alter table public.pengajuan_pelantikan enable row level security;
+
+-- profil_pengguna: lihat diri sendiri; pembina melihat Gudep-nya; mabigus melihat semua
+drop policy if exists "profil baca"                 on public.profil_pengguna;
+drop policy if exists "pembina ubah siswa gudepnya" on public.profil_pengguna;
+drop policy if exists "mabigus ubah pembina"        on public.profil_pengguna;
+create policy "profil baca" on public.profil_pengguna for select to authenticated
+  using (id = auth.uid() or public.peran_saya() = 'mabigus'
+         or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()));
+create policy "pembina ubah siswa gudepnya" on public.profil_pengguna for update to authenticated
+  using      (public.peran_saya() = 'pembina' and role = 'siswa' and gudep = public.gudep_saya())
+  with check (public.peran_saya() = 'pembina' and role = 'siswa' and gudep = public.gudep_saya());
+create policy "mabigus ubah pembina" on public.profil_pengguna for update to authenticated
+  using      (public.peran_saya() = 'mabigus' and role = 'pembina')
+  with check (public.peran_saya() = 'mabigus' and role = 'pembina');
+-- (Akun baru dibuat oleh Edge Function "buat-akun" dengan service_role, jadi tidak perlu aturan insert.)
+
+-- absensi, iuran, pencapaian SKU: dibaca siswa ybs/pembinanya/mabigus, diubah pembinanya
+drop policy if exists "absensi baca"  on public.absensi_mingguan;
+drop policy if exists "absensi tulis" on public.absensi_mingguan;
+create policy "absensi baca"  on public.absensi_mingguan for select to authenticated using (public.boleh_lihat_siswa(siswa_id));
+create policy "absensi tulis" on public.absensi_mingguan for all    to authenticated
+  using (public.pembina_dari(siswa_id)) with check (public.pembina_dari(siswa_id));
+
+drop policy if exists "iuran baca"  on public.iuran_bulanan;
+drop policy if exists "iuran tulis" on public.iuran_bulanan;
+create policy "iuran baca"  on public.iuran_bulanan for select to authenticated using (public.boleh_lihat_siswa(siswa_id));
+create policy "iuran tulis" on public.iuran_bulanan for all    to authenticated
+  using (public.pembina_dari(siswa_id)) with check (public.pembina_dari(siswa_id));
+
+drop policy if exists "sku baca"  on public.pencapaian_sku;
+drop policy if exists "sku tulis" on public.pencapaian_sku;
+create policy "sku baca"  on public.pencapaian_sku for select to authenticated using (public.boleh_lihat_siswa(siswa_id));
+create policy "sku tulis" on public.pencapaian_sku for all    to authenticated
+  using (public.pembina_dari(siswa_id)) with check (public.pembina_dari(siswa_id));
+
+-- kas keluar: pembina mengelola Gudep-nya, mabigus membaca semua
 drop policy if exists "kas_keluar baca"  on public.kas_keluar;
 drop policy if exists "kas_keluar tulis" on public.kas_keluar;
 drop policy if exists "kas_keluar hapus" on public.kas_keluar;
@@ -55,70 +242,68 @@ create policy "kas_keluar tulis" on public.kas_keluar for insert to authenticate
 create policy "kas_keluar hapus" on public.kas_keluar for delete to authenticated
   using (public.peran_saya() = 'pembina' and gudep = public.gudep_saya());
 
--- 5. Agenda kegiatan (gudep kosong = untuk semua Gudep)
-create table if not exists public.agenda (
-  id          uuid primary key default gen_random_uuid(),
-  gudep       text check (gudep is null or gudep in ('05.093','05.122')),
-  tanggal     date not null,
-  judul       text not null,
-  keterangan  text,
-  dibuat_oleh uuid default auth.uid(),
-  dibuat_pada timestamptz not null default now()
-);
-alter table public.agenda enable row level security;
-
+-- agenda: semua yang masuk boleh membaca agenda Gudep-nya dan agenda umum
 drop policy if exists "agenda baca"  on public.agenda;
 drop policy if exists "agenda tulis" on public.agenda;
 drop policy if exists "agenda hapus" on public.agenda;
 create policy "agenda baca" on public.agenda for select to authenticated
-  using (gudep is null or public.peran_saya() = 'mabigus' or gudep = public.gudep_saya());
+  using (public.peran_saya() is not null and (gudep is null or public.peran_saya() = 'mabigus' or gudep = public.gudep_saya()));
 create policy "agenda tulis" on public.agenda for insert to authenticated
   with check (public.peran_saya() = 'mabigus' or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()));
 create policy "agenda hapus" on public.agenda for delete to authenticated
   using (public.peran_saya() = 'mabigus' or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()));
 
--- Catatan SKU: kode materi berubah dari SKU-01..05 (contoh lama) menjadi M-01, B-01, T-01, dst. (lihat sku.js).
--- Data pencapaian dengan kode lama tidak dihapus, tetapi tidak tampil lagi di aplikasi.
-
--- =====================================================================
--- Tahap 2: pembina dikelola mabigus, butir SKU bisa diubah, pelantikan golongan
--- =====================================================================
-
--- 6. Kolom tambahan: tingkatan terakhir yang sudah dilantik, dan nomor HP (pembina)
-alter table public.profil_pengguna
-  add column if not exists tingkat_dilantik text,
-  add column if not exists no_hp text;
-do $$ begin
-  alter table public.profil_pengguna
-    add constraint profil_tingkat_dilantik_valid check (tingkat_dilantik is null or tingkat_dilantik in ('mula','bantu','tata'));
-exception when duplicate_object then null; end $$;
-
--- 7. Mabigus boleh mengubah data pembina (nama, Gudep, HP, aktif)
-drop policy if exists "mabigus ubah pembina" on public.profil_pengguna;
-create policy "mabigus ubah pembina" on public.profil_pengguna
-  for update to authenticated
-  using      (public.peran_saya() = 'mabigus' and role = 'pembina')
-  with check (public.peran_saya() = 'mabigus' and role = 'pembina');
-
--- 8. Butir SKU (bisa ditambah dan diubah pembina/mabigus; dinonaktifkan, bukan dihapus)
-create table if not exists public.materi_sku (
-  kode    text primary key,
-  tingkat text not null check (tingkat in ('mula','bantu','tata')),
-  uraian  text not null,
-  urutan  integer not null default 0,
-  aktif   boolean not null default true
-);
-alter table public.materi_sku enable row level security;
+-- butir SKU: semua boleh membaca; pembina dan mabigus boleh menambah dan mengubah (tidak ada hapus)
 drop policy if exists "materi_sku baca"  on public.materi_sku;
 drop policy if exists "materi_sku tulis" on public.materi_sku;
 drop policy if exists "materi_sku ubah"  on public.materi_sku;
-create policy "materi_sku baca" on public.materi_sku for select to authenticated using (true);
+create policy "materi_sku baca"  on public.materi_sku for select to authenticated using (true);
 create policy "materi_sku tulis" on public.materi_sku for insert to authenticated
   with check (public.peran_saya() in ('pembina','mabigus'));
-create policy "materi_sku ubah" on public.materi_sku for update to authenticated
+create policy "materi_sku ubah"  on public.materi_sku for update to authenticated
   using (public.peran_saya() in ('pembina','mabigus')) with check (public.peran_saya() in ('pembina','mabigus'));
 
--- Isi awal (CONTOH, sama dengan sku.js) — ubah lewat menu SKU > Kelola butir
+-- pengajuan pelantikan: pembina mengajukan; keputusan hanya lewat fungsi putuskan_pelantikan
+drop policy if exists "pelantikan baca"   on public.pengajuan_pelantikan;
+drop policy if exists "pelantikan ajukan" on public.pengajuan_pelantikan;
+create policy "pelantikan baca" on public.pengajuan_pelantikan for select to authenticated
+  using (public.boleh_lihat_siswa(siswa_id));
+create policy "pelantikan ajukan" on public.pengajuan_pelantikan for insert to authenticated
+  with check (public.pembina_dari(siswa_id) and gudep = public.gudep_saya() and status = 'menunggu'
+              and diputus_oleh is null and catatan_mabigus is null);
+
+-- ---------------------------------------------------------------------
+-- 6. Keputusan pelantikan oleh mabigus (status + tingkatan siswa berubah sekaligus)
+-- ---------------------------------------------------------------------
+create or replace function public.putuskan_pelantikan(p_id uuid, p_setuju boolean, p_catatan text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare r public.pengajuan_pelantikan;
+begin
+  if public.peran_saya() is distinct from 'mabigus' then
+    raise exception 'Hanya mabigus yang boleh memutuskan pelantikan';
+  end if;
+  select * into r from public.pengajuan_pelantikan where id = p_id for update;
+  if not found or r.status <> 'menunggu' then
+    raise exception 'Pengajuan tidak ditemukan atau sudah diputuskan';
+  end if;
+  update public.pengajuan_pelantikan
+     set status = case when p_setuju then 'disetujui' else 'ditolak' end,
+         catatan_mabigus = p_catatan, diputus_oleh = auth.uid(), diputus_pada = now()
+   where id = p_id;
+  if p_setuju then
+    update public.profil_pengguna
+       set tingkat_dilantik = r.tingkat,
+           tingkat = case r.tingkat when 'mula' then 'bantu' when 'bantu' then 'tata' else 'tata' end
+     where id = r.siswa_id;
+  end if;
+end $$;
+revoke all on function public.putuskan_pelantikan(uuid, boolean, text) from public, anon;
+grant execute on function public.putuskan_pelantikan(uuid, boolean, text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 7. Isi awal butir SKU (CONTOH — sesuaikan lewat menu SKU > Kelola butir SKU)
+--    Butir yang sudah ada tidak ditimpa.
+-- ---------------------------------------------------------------------
 insert into public.materi_sku (kode, tingkat, uraian, urutan) values
  ('M-01','mula','Taat menjalankan ibadah agamanya',1),('M-02','mula','Hafal Dwi Satya dan Dwi Darma',2),
  ('M-03','mula','Mengenal bendera Merah Putih dan cara menghormatinya',3),('M-04','mula','Hafal lagu Indonesia Raya',4),
@@ -137,49 +322,15 @@ insert into public.materi_sku (kode, tingkat, uraian, urutan) values
  ('T-09','tata','Lari 50 meter atau ketangkasan sejenis',9),('T-10','tata','Bercerita tentang pahlawan nasional',10)
 on conflict (kode) do nothing;
 
--- 9. Pengajuan pelantikan golongan: pembina mengajukan, mabigus menyetujui atau menolak
-create table if not exists public.pengajuan_pelantikan (
-  id              uuid primary key default gen_random_uuid(),
-  siswa_id        uuid not null references public.profil_pengguna(id) on delete cascade,
-  gudep           text not null,
-  tingkat         text not null check (tingkat in ('mula','bantu','tata')),
-  status          text not null default 'menunggu' check (status in ('menunggu','disetujui','ditolak')),
-  catatan_pembina text,
-  catatan_mabigus text,
-  diajukan_oleh   uuid default auth.uid(),
-  diajukan_pada   timestamptz not null default now(),
-  diputus_oleh    uuid,
-  diputus_pada    timestamptz
-);
-create unique index if not exists pengajuan_satu_menunggu
-  on public.pengajuan_pelantikan (siswa_id, tingkat) where status = 'menunggu';
-alter table public.pengajuan_pelantikan enable row level security;
-drop policy if exists "pelantikan baca"  on public.pengajuan_pelantikan;
-drop policy if exists "pelantikan ajukan" on public.pengajuan_pelantikan;
-create policy "pelantikan baca" on public.pengajuan_pelantikan for select to authenticated
-  using (public.peran_saya() = 'mabigus' or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()) or siswa_id = auth.uid());
-create policy "pelantikan ajukan" on public.pengajuan_pelantikan for insert to authenticated
-  with check (public.peran_saya() = 'pembina' and gudep = public.gudep_saya() and status = 'menunggu'
-    and exists (select 1 from public.profil_pengguna s where s.id = siswa_id and s.role = 'siswa' and s.gudep = public.gudep_saya()));
+-- Catatan: kode SKU lama (SKU-01 s.d. SKU-05) dari versi awal aplikasi tidak dihapus,
+-- tetapi tidak tampil lagi. Siswa perlu dicentang ulang dengan butir baru.
 
--- Keputusan mabigus: satu langkah yang mengubah status pengajuan sekaligus tingkatan siswa
-create or replace function public.putuskan_pelantikan(p_id uuid, p_setuju boolean, p_catatan text default null)
-returns void language plpgsql security definer set search_path = public as $$
-declare r public.pengajuan_pelantikan;
-begin
-  if public.peran_saya() is distinct from 'mabigus' then raise exception 'Hanya mabigus yang boleh memutuskan pelantikan'; end if;
-  select * into r from public.pengajuan_pelantikan where id = p_id for update;
-  if not found or r.status <> 'menunggu' then raise exception 'Pengajuan tidak ditemukan atau sudah diputuskan'; end if;
-  update public.pengajuan_pelantikan
-     set status = case when p_setuju then 'disetujui' else 'ditolak' end,
-         catatan_mabigus = p_catatan, diputus_oleh = auth.uid(), diputus_pada = now()
-   where id = p_id;
-  if p_setuju then
-    update public.profil_pengguna
-       set tingkat_dilantik = r.tingkat,
-           tingkat = case r.tingkat when 'mula' then 'bantu' when 'bantu' then 'tata' else 'tata' end
-     where id = r.siswa_id;
-  end if;
-end $$;
-revoke all on function public.putuskan_pelantikan(uuid, boolean, text) from public, anon;
-grant execute on function public.putuskan_pelantikan(uuid, boolean, text) to authenticated;
+-- ---------------------------------------------------------------------
+-- 8. Pemeriksaan: hasil query ini harus menampilkan 8 tabel dengan rls = true dan jumlah_aturan 2–3
+-- ---------------------------------------------------------------------
+select c.relname as tabel, c.relrowsecurity as rls,
+       (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = c.relname) as jumlah_aturan
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relname in ('profil_pengguna','absensi_mingguan','iuran_bulanan','pencapaian_sku',
+  'kas_keluar','agenda','materi_sku','pengajuan_pelantikan')
+order by 1;
