@@ -131,47 +131,49 @@ create unique index if not exists pengajuan_satu_menunggu
 -- ---------------------------------------------------------------------
 -- 4. Fungsi bantu untuk aturan akses
 --    (security definer agar tidak berputar saat membaca profil_pengguna)
+--    Semua diberi awalan "pramuka_" agar tidak bertabrakan dengan fungsi lama di database.
 -- ---------------------------------------------------------------------
-create or replace function public.peran_saya() returns text
+create or replace function public.pramuka_peran() returns text
   language sql stable security definer set search_path = public
   as $$ select role from public.profil_pengguna where id = auth.uid() and aktif $$;
 
-create or replace function public.gudep_saya() returns text
+create or replace function public.pramuka_gudep() returns text
   language sql stable security definer set search_path = public
   as $$ select gudep from public.profil_pengguna where id = auth.uid() and aktif $$;
 
 -- Gudep seorang siswa (null bila id itu bukan siswa)
-create or replace function public.gudep_siswa(p_siswa uuid) returns text
+create or replace function public.pramuka_gudep_siswa(p_siswa uuid) returns text
   language sql stable security definer set search_path = public
   as $$ select gudep from public.profil_pengguna where id = p_siswa and role = 'siswa' $$;
 
 -- Boleh mengelola data siswa ini? (pembina aktif di Gudep yang sama)
-create or replace function public.pembina_dari(p_siswa uuid) returns boolean
+create or replace function public.pramuka_pembina_dari(p_siswa uuid) returns boolean
   language sql stable security definer set search_path = public
-  as $$ select public.peran_saya() = 'pembina' and public.gudep_siswa(p_siswa) = public.gudep_saya() $$;
+  as $$ select public.pramuka_peran() = 'pembina' and public.pramuka_gudep_siswa(p_siswa) = public.pramuka_gudep() $$;
 
 -- Boleh melihat data siswa ini? (siswa itu sendiri, pembinanya, atau mabigus)
-create or replace function public.boleh_lihat_siswa(p_siswa uuid) returns boolean
+create or replace function public.pramuka_boleh_lihat(p_siswa uuid) returns boolean
   language sql stable security definer set search_path = public
-  as $$ select p_siswa = auth.uid() or public.peran_saya() = 'mabigus' or public.pembina_dari(p_siswa) $$;
+  as $$ select p_siswa = auth.uid() or public.pramuka_peran() = 'mabigus' or public.pramuka_pembina_dari(p_siswa) $$;
 
 -- Lindungi kolom penting: NIS/NIP dan peran tidak boleh diubah dari aplikasi,
 -- dan tingkatan yang sudah dilantik hanya berubah lewat persetujuan mabigus.
-create or replace function public.jaga_profil() returns trigger
+create or replace function public.pramuka_jaga_profil() returns trigger
   language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is null then return new; end if;   -- dari server (service_role / SQL Editor)
   if new.id <> old.id or new.nis_nip <> old.nis_nip or new.role <> old.role then
     raise exception 'NIS/NIP dan peran tidak boleh diubah dari aplikasi';
   end if;
-  if new.tingkat_dilantik is distinct from old.tingkat_dilantik and public.peran_saya() is distinct from 'mabigus' then
+  if new.tingkat_dilantik is distinct from old.tingkat_dilantik and public.pramuka_peran() is distinct from 'mabigus' then
     raise exception 'Tingkatan yang sudah dilantik hanya bisa diubah lewat persetujuan mabigus';
   end if;
   return new;
 end $$;
-drop trigger if exists jaga_profil on public.profil_pengguna;
-create trigger jaga_profil before update on public.profil_pengguna
-  for each row execute function public.jaga_profil();
+drop trigger if exists jaga_profil on public.profil_pengguna;   -- nama lama dari versi sebelumnya
+drop trigger if exists pramuka_jaga_profil on public.profil_pengguna;
+create trigger pramuka_jaga_profil before update on public.profil_pengguna
+  for each row execute function public.pramuka_jaga_profil();
 
 -- ---------------------------------------------------------------------
 -- 5. Aturan akses (Row Level Security)
@@ -202,56 +204,56 @@ drop policy if exists "profil baca"                 on public.profil_pengguna;
 drop policy if exists "pembina ubah siswa gudepnya" on public.profil_pengguna;
 drop policy if exists "mabigus ubah pembina"        on public.profil_pengguna;
 create policy "profil baca" on public.profil_pengguna for select to authenticated
-  using (id = auth.uid() or public.peran_saya() = 'mabigus'
-         or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()));
+  using (id = auth.uid() or public.pramuka_peran() = 'mabigus'
+         or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
 create policy "pembina ubah siswa gudepnya" on public.profil_pengguna for update to authenticated
-  using      (public.peran_saya() = 'pembina' and role = 'siswa' and gudep = public.gudep_saya())
-  with check (public.peran_saya() = 'pembina' and role = 'siswa' and gudep = public.gudep_saya());
+  using      (public.pramuka_peran() = 'pembina' and role = 'siswa' and gudep = public.pramuka_gudep())
+  with check (public.pramuka_peran() = 'pembina' and role = 'siswa' and gudep = public.pramuka_gudep());
 create policy "mabigus ubah pembina" on public.profil_pengguna for update to authenticated
-  using      (public.peran_saya() = 'mabigus' and role = 'pembina')
-  with check (public.peran_saya() = 'mabigus' and role = 'pembina');
+  using      (public.pramuka_peran() = 'mabigus' and role = 'pembina')
+  with check (public.pramuka_peran() = 'mabigus' and role = 'pembina');
 -- (Akun baru dibuat oleh Edge Function "buat-akun" dengan service_role, jadi tidak perlu aturan insert.)
 
 -- absensi, iuran, pencapaian SKU: dibaca siswa ybs/pembinanya/mabigus, diubah pembinanya
 drop policy if exists "absensi baca"  on public.absensi_mingguan;
 drop policy if exists "absensi tulis" on public.absensi_mingguan;
-create policy "absensi baca"  on public.absensi_mingguan for select to authenticated using (public.boleh_lihat_siswa(siswa_id));
+create policy "absensi baca"  on public.absensi_mingguan for select to authenticated using (public.pramuka_boleh_lihat(siswa_id));
 create policy "absensi tulis" on public.absensi_mingguan for all    to authenticated
-  using (public.pembina_dari(siswa_id)) with check (public.pembina_dari(siswa_id));
+  using (public.pramuka_pembina_dari(siswa_id)) with check (public.pramuka_pembina_dari(siswa_id));
 
 drop policy if exists "iuran baca"  on public.iuran_bulanan;
 drop policy if exists "iuran tulis" on public.iuran_bulanan;
-create policy "iuran baca"  on public.iuran_bulanan for select to authenticated using (public.boleh_lihat_siswa(siswa_id));
+create policy "iuran baca"  on public.iuran_bulanan for select to authenticated using (public.pramuka_boleh_lihat(siswa_id));
 create policy "iuran tulis" on public.iuran_bulanan for all    to authenticated
-  using (public.pembina_dari(siswa_id)) with check (public.pembina_dari(siswa_id));
+  using (public.pramuka_pembina_dari(siswa_id)) with check (public.pramuka_pembina_dari(siswa_id));
 
 drop policy if exists "sku baca"  on public.pencapaian_sku;
 drop policy if exists "sku tulis" on public.pencapaian_sku;
-create policy "sku baca"  on public.pencapaian_sku for select to authenticated using (public.boleh_lihat_siswa(siswa_id));
+create policy "sku baca"  on public.pencapaian_sku for select to authenticated using (public.pramuka_boleh_lihat(siswa_id));
 create policy "sku tulis" on public.pencapaian_sku for all    to authenticated
-  using (public.pembina_dari(siswa_id)) with check (public.pembina_dari(siswa_id));
+  using (public.pramuka_pembina_dari(siswa_id)) with check (public.pramuka_pembina_dari(siswa_id));
 
 -- kas keluar: pembina mengelola Gudep-nya, mabigus membaca semua
 drop policy if exists "kas_keluar baca"  on public.kas_keluar;
 drop policy if exists "kas_keluar tulis" on public.kas_keluar;
 drop policy if exists "kas_keluar hapus" on public.kas_keluar;
 create policy "kas_keluar baca" on public.kas_keluar for select to authenticated
-  using (public.peran_saya() = 'mabigus' or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()));
+  using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
 create policy "kas_keluar tulis" on public.kas_keluar for insert to authenticated
-  with check (public.peran_saya() = 'pembina' and gudep = public.gudep_saya());
+  with check (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep());
 create policy "kas_keluar hapus" on public.kas_keluar for delete to authenticated
-  using (public.peran_saya() = 'pembina' and gudep = public.gudep_saya());
+  using (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep());
 
 -- agenda: semua yang masuk boleh membaca agenda Gudep-nya dan agenda umum
 drop policy if exists "agenda baca"  on public.agenda;
 drop policy if exists "agenda tulis" on public.agenda;
 drop policy if exists "agenda hapus" on public.agenda;
 create policy "agenda baca" on public.agenda for select to authenticated
-  using (public.peran_saya() is not null and (gudep is null or public.peran_saya() = 'mabigus' or gudep = public.gudep_saya()));
+  using (public.pramuka_peran() is not null and (gudep is null or public.pramuka_peran() = 'mabigus' or gudep = public.pramuka_gudep()));
 create policy "agenda tulis" on public.agenda for insert to authenticated
-  with check (public.peran_saya() = 'mabigus' or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()));
+  with check (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
 create policy "agenda hapus" on public.agenda for delete to authenticated
-  using (public.peran_saya() = 'mabigus' or (public.peran_saya() = 'pembina' and gudep = public.gudep_saya()));
+  using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
 
 -- butir SKU: semua boleh membaca; pembina dan mabigus boleh menambah dan mengubah (tidak ada hapus)
 drop policy if exists "materi_sku baca"  on public.materi_sku;
@@ -259,27 +261,28 @@ drop policy if exists "materi_sku tulis" on public.materi_sku;
 drop policy if exists "materi_sku ubah"  on public.materi_sku;
 create policy "materi_sku baca"  on public.materi_sku for select to authenticated using (true);
 create policy "materi_sku tulis" on public.materi_sku for insert to authenticated
-  with check (public.peran_saya() in ('pembina','mabigus'));
+  with check (public.pramuka_peran() in ('pembina','mabigus'));
 create policy "materi_sku ubah"  on public.materi_sku for update to authenticated
-  using (public.peran_saya() in ('pembina','mabigus')) with check (public.peran_saya() in ('pembina','mabigus'));
+  using (public.pramuka_peran() in ('pembina','mabigus')) with check (public.pramuka_peran() in ('pembina','mabigus'));
 
 -- pengajuan pelantikan: pembina mengajukan; keputusan hanya lewat fungsi putuskan_pelantikan
 drop policy if exists "pelantikan baca"   on public.pengajuan_pelantikan;
 drop policy if exists "pelantikan ajukan" on public.pengajuan_pelantikan;
 create policy "pelantikan baca" on public.pengajuan_pelantikan for select to authenticated
-  using (public.boleh_lihat_siswa(siswa_id));
+  using (public.pramuka_boleh_lihat(siswa_id));
 create policy "pelantikan ajukan" on public.pengajuan_pelantikan for insert to authenticated
-  with check (public.pembina_dari(siswa_id) and gudep = public.gudep_saya() and status = 'menunggu'
+  with check (public.pramuka_pembina_dari(siswa_id) and gudep = public.pramuka_gudep() and status = 'menunggu'
               and diputus_oleh is null and catatan_mabigus is null);
 
 -- ---------------------------------------------------------------------
 -- 6. Keputusan pelantikan oleh mabigus (status + tingkatan siswa berubah sekaligus)
 -- ---------------------------------------------------------------------
+drop function if exists public.putuskan_pelantikan(uuid, boolean, text);
 create or replace function public.putuskan_pelantikan(p_id uuid, p_setuju boolean, p_catatan text default null)
 returns void language plpgsql security definer set search_path = public as $$
 declare r public.pengajuan_pelantikan;
 begin
-  if public.peran_saya() is distinct from 'mabigus' then
+  if public.pramuka_peran() is distinct from 'mabigus' then
     raise exception 'Hanya mabigus yang boleh memutuskan pelantikan';
   end if;
   select * into r from public.pengajuan_pelantikan where id = p_id for update;
