@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Butir SKU — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <nav id="subnav"></nav>
+  <div><h1>Butir kecakapan SKU</h1><p class="muted">Tambah, ubah, urutkan, atau nonaktifkan butir. Butir yang dinonaktifkan tidak dihapus, sehingga catatan kelulusan siswa tetap aman.</p></div>
+  <div id="peringatan"></div>
+  <div class="tab" role="tablist" id="tab"></div>
+  <form id="form-tambah" class="card">
+    <h2 id="judul-tambah">Tambah butir</h2>
+    <label for="uraian-baru">Uraian kecakapan</label>
+    <textarea id="uraian-baru" rows="2" maxlength="160" required placeholder="mis. Mengenal tanda-tanda alam"></textarea>
+    <button class="btn" style="margin-top:10px">Tambah butir</button>
+  </form>
+  <ul class="daftar card" id="daftar" style="padding:4px 14px"></ul>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="sku.js"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
+  const $=id=>document.getElementById(id);
+  if(p.role==='pembina') subNav($('subnav'),[['uji_sku.html','Uji siswa'],['kelola_sku.html','Kelola butir SKU']]); else $('subnav').remove();
+  const AWALAN={mula:'M',bantu:'B',tata:'T'};
+  let tingkat='mula', semua=[], dariDb=false, ubah=null;
+
+  $('tab').innerHTML=URUT_TINGKAT.map(t=>`<button role="tab" data-t="${t}" aria-selected="${t===tingkat}">${TINGKAT[t].replace('Siaga ','')}</button>`).join('');
+  $('tab').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;tingkat=b.dataset.t;ubah=null;
+    $('tab').querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));gambar()};
+
+  async function muat(){
+    const h=await muatMateriSku(); dariDb=h.dariDb; semua=h.semua;
+    if(!dariDb){
+      // Tabel belum ada: tampilkan daftar bawaan saja (tidak bisa diubah)
+      semua=URUT_TINGKAT.flatMap(t=>MATERI_SKU[t].map(([kode,uraian],i)=>({kode,uraian,tingkat:t,urutan:i+1,aktif:true})));
+      tampilError($('peringatan'),'Butir SKU belum bisa diubah',h.error||{message:'relation materi_sku does not exist'});
+      $('form-tambah').hidden=true;
+    }
+    gambar();
+  }
+  function gambar(){
+    $('judul-tambah').textContent=`Tambah butir ${TINGKAT[tingkat]}`;
+    const list=semua.filter(r=>r.tingkat===tingkat).sort((a,b)=>a.urutan-b.urutan);
+    const aktif=list.filter(r=>r.aktif!==false);
+    $('daftar').innerHTML=list.length?list.map(r=>{
+      const i=aktif.indexOf(r);
+      if(ubah===r.kode) return `<li data-kode="${esc(r.kode)}" style="flex-direction:column;align-items:stretch">
+        <label for="ubah-teks" style="margin:0">Ubah ${esc(r.kode)}</label><textarea id="ubah-teks" rows="2" maxlength="160">${esc(r.uraian)}</textarea>
+        <div style="display:flex;gap:8px"><button class="btn kedua kecil" data-aksi="batal" type="button">Batal</button><button class="btn kecil" data-aksi="simpan" type="button">Simpan</button></div></li>`;
+      return `<li data-kode="${esc(r.kode)}" class="butir ${r.aktif===false?'redup':''}"><div style="display:flex;gap:10px;align-items:flex-start">
+        <span class="pil">${esc(r.kode)}</span><div><b style="font-weight:600">${esc(r.uraian)}</b>${r.aktif===false?'<div class="muted">Nonaktif — tidak muncul saat uji</div>':''}</div></div>
+        ${dariDb?`<div class="tombol-baris">
+          ${r.aktif!==false?`<button class="tombol-hapus" data-aksi="naik" aria-label="Naikkan" ${i<=0?'disabled':''}>↑</button><button class="tombol-hapus" data-aksi="turun" aria-label="Turunkan" ${i===aktif.length-1?'disabled':''}>↓</button>
+          <button class="tombol-hapus" data-aksi="ubah">Ubah</button>`:''}
+          <button class="tombol-hapus" data-aksi="aktif">${r.aktif===false?'Aktifkan':'Nonaktifkan'}</button></div>`:''}</li>`}).join('')
+      :'<li class="muted">Belum ada butir untuk tingkatan ini.</li>';
+  }
+  async function simpan(rows,pesan){
+    const {error}=await db.from('materi_sku').upsert(rows,{onConflict:'kode'});
+    if(error){toast('Gagal menyimpan: '+error.message);return false}
+    rows.forEach(r=>Object.assign(semua.find(x=>x.kode===r.kode)||(semua.push({...r}),{}),r));
+    toast(pesan);gambar();return true;
+  }
+  $('daftar').addEventListener('click',async e=>{
+    const b=e.target.closest('[data-aksi]'); if(!b) return;
+    const r=semua.find(x=>x.kode===b.closest('li').dataset.kode), aksi=b.dataset.aksi;
+    if(aksi==='ubah'){ubah=r.kode;gambar();$('ubah-teks').focus();return}
+    if(aksi==='batal'){ubah=null;gambar();return}
+    if(aksi==='simpan'){const t=$('ubah-teks').value.trim();if(!t)return toast('Uraian tidak boleh kosong');ubah=null;await simpan([{...r,uraian:t}],'Butir diperbarui');return}
+    if(aksi==='aktif'){await simpan([{...r,aktif:r.aktif===false}],r.aktif===false?'Butir diaktifkan':'Butir dinonaktifkan');return}
+    // Naik/turun: tukar urutan dengan butir aktif di sebelahnya
+    const aktif=semua.filter(x=>x.tingkat===tingkat&&x.aktif!==false).sort((a,b)=>a.urutan-b.urutan);
+    const i=aktif.indexOf(r), j=aksi==='naik'?i-1:i+1; if(j<0||j>=aktif.length) return;
+    await simpan([{...r,urutan:aktif[j].urutan},{...aktif[j],urutan:r.urutan}],'Urutan diperbarui');
+  });
+  $('form-tambah').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const uraian=$('uraian-baru').value.trim(); if(!uraian) return;
+    const awal=AWALAN[tingkat], nomor=Math.max(0,...semua.filter(r=>r.kode.startsWith(awal+'-')).map(r=>+r.kode.split('-')[1]||0))+1;
+    const urutan=Math.max(0,...semua.filter(r=>r.tingkat===tingkat).map(r=>r.urutan))+1;
+    const ok=await simpan([{kode:`${awal}-${String(nomor).padStart(2,'0')}`,tingkat,uraian,urutan,aktif:true}],'Butir ditambahkan');
+    if(ok) $('uraian-baru').value='';
+  });
+  muat();
+})();
+</script></body></html>

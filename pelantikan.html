@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Pelantikan — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <nav id="subnav"></nav>
+  <div><div class="label" id="sub"></div><h1>Pelantikan golongan</h1>
+    <p class="muted" id="penjelasan"></p></div>
+  <div id="pilih-gudep" hidden><label for="gudep">Gudep</label><select id="gudep"><option value="">Semua Gudep</option><option value="05.093">05.093 Putra</option><option value="05.122">05.122 Putri</option></select></div>
+  <div id="isi" style="display:flex;flex-direction:column;gap:12px"><div class="kerangka"></div></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="sku.js"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
+  const $=id=>document.getElementById(id), isi=$('isi'), mabigus=p.role==='mabigus';
+  if(!mabigus) subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung'],['pelantikan.html','Pelantikan']]);
+  else {$('subnav').remove();$('pilih-gudep').hidden=false}
+  $('penjelasan').textContent=mabigus
+    ?'Pembina mengajukan siswa yang sudah menyelesaikan semua butir SKU. Periksa lalu setujui atau tolak. Bila disetujui, tingkatan siswa naik otomatis.'
+    :'Siswa yang sudah lulus semua butir SKU tingkatannya bisa diajukan. Mabigus akan menyetujui atau menolak pengajuan.';
+  const [siswa]=await Promise.all([ambilSiswa(p,{termasukNonaktif:true}),muatMateriSku()]);
+  let ajuan=[], lulus={};
+
+  async function muat(){
+    const ids=siswa.map(s=>s.id);
+    const [aj,sk]=await Promise.all([
+      db.from('pengajuan_pelantikan').select('*').order('diajukan_pada',{ascending:false}),
+      ids.length?db.from('pencapaian_sku').select('siswa_id,kode_sku,tanggal').in('siswa_id',ids):{data:[],error:null}]);
+    if(aj.error||sk.error){tampilError(isi,'Data pelantikan gagal dimuat',aj.error||sk.error);return}
+    ajuan=aj.data; lulus={};
+    sk.data.forEach(r=>(lulus[r.siswa_id]=lulus[r.siswa_id]||new Set()).add(r.kode_sku));
+    gambar();
+  }
+  const sis=id=>siswa.find(s=>s.id===id)||{nama:'(siswa tidak ditemukan)'};
+  const tgl=t=>new Date(t).toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
+  const kartuSku=(s,tk)=>{const L=lulus[s.id]||new Set(), n=MATERI_SKU[tk].filter(([k])=>L.has(k)).length, pr={lulus:n,total:MATERI_SKU[tk].length};
+    return `<div style="margin-top:8px"><div class="kepala-bagian" style="margin:0 0 4px"><span class="muted">SKU ${esc(TINGKAT[tk])}</span><span class="muted">${n}/${pr.total}</span></div>
+      <div class="progres ${skuPenuh(pr)?'penuh':''}"><i style="width:${lebarPersen(pr)}%"></i></div>
+      ${!skuPenuh(pr)?'<p class="pil merah" style="margin-top:6px">Belum semua butir lulus</p>':''}
+      <details style="margin-top:6px"><summary class="muted" style="cursor:pointer">Lihat butir</summary><ul class="daftar">${MATERI_SKU[tk].map(([k,t])=>
+        `<li><span>${esc(t)}</span>${L.has(k)?'<span class="pil hijau">✓</span>':'<span class="pil">Belum</span>'}</li>`).join('')}</ul></details></div>`};
+  const label={menunggu:['Menunggu','kuning'],disetujui:['Disetujui','hijau'],ditolak:['Ditolak','merah']};
+  const riwayat=list=>list.length?`<ul class="daftar">${list.map(a=>{const s=sis(a.siswa_id);return `<li><div><b>${esc(s.nama)}</b>
+      <div class="muted">${esc(TINGKAT[a.tingkat])} · diajukan ${esc(tgl(a.diajukan_pada))}${a.diputus_pada?' · diputus '+esc(tgl(a.diputus_pada)):''}</div>
+      ${a.catatan_mabigus?`<div class="muted">Catatan mabigus: ${esc(a.catatan_mabigus)}</div>`:''}</div>
+      <span class="pil ${label[a.status][1]}">${label[a.status][0]}</span></li>`}).join('')}</ul>`:'<p class="muted">Belum ada.</p>';
+
+  function gambar(){
+    const g=mabigus?$('gudep').value:p.gudep;
+    $('sub').textContent=namaGudep(g||null);
+    const ag=ajuan.filter(a=>!g||a.gudep===g), menunggu=ag.filter(a=>a.status==='menunggu'), selesai=ag.filter(a=>a.status!=='menunggu');
+    if(mabigus){
+      isi.innerHTML=`<section><div class="kepala-bagian"><h2>Menunggu persetujuan</h2><span class="pil ${menunggu.length?'kuning':'hijau'}">${menunggu.length}</span></div></section>
+        ${menunggu.length?menunggu.map(a=>{const s=sis(a.siswa_id);return `<section class="card" data-id="${esc(a.id)}">
+          <div class="siswa-kepala"><div><b>${esc(s.nama)}</b><div class="muted">${esc(namaGudep(a.gudep))}${s.kelas?' · Kelas '+esc(s.kelas):''}${s.barung?' · Barung '+esc(s.barung):''}</div></div>
+          <span class="pil">${esc(TINGKAT[a.tingkat])}</span></div>
+          <p class="muted" style="margin-top:6px">Diajukan ${esc(tgl(a.diajukan_pada))}${a.catatan_pembina?` · “${esc(a.catatan_pembina)}”`:''}</p>
+          ${kartuSku(s,a.tingkat)}
+          <label for="cat-${esc(a.id)}">Catatan untuk pembina (opsional)</label><input id="cat-${esc(a.id)}" maxlength="160" placeholder="mis. Pelantikan saat upacara Senin">
+          <div class="aksi" style="margin-top:10px"><button class="btn kedua tolak" type="button" data-setuju="0">Tolak</button><button class="btn setuju" type="button" data-setuju="1">Setujui pelantikan</button></div></section>`}).join('')
+          :'<div class="kosong"><b>Tidak ada pengajuan yang menunggu</b><span>Pengajuan baru dari pembina akan muncul di sini.</span></div>'}
+        <section class="card"><h2>Riwayat keputusan</h2><div style="margin-top:6px">${riwayat(selesai)}</div></section>`;
+    } else {
+      const siap=siswa.filter(s=>s.aktif!==false&&statusSiswaSku(s,lulus[s.id]||new Set()).siap&&!menunggu.some(a=>a.siswa_id===s.id));
+      isi.innerHTML=`<section><div class="kepala-bagian"><h2>Siap diajukan</h2><span class="pil ${siap.length?'kuning':''}">${siap.length}</span></div></section>
+        ${siap.length?siap.map(s=>{const tk=s.tingkat||'mula';return `<section class="card" data-siswa="${esc(s.id)}">
+          <div class="siswa-kepala"><div><b>${esc(s.nama)}</b><div class="muted">${s.kelas?'Kelas '+esc(s.kelas):''}${s.barung?' · Barung '+esc(s.barung):''}</div></div><span class="pil hijau">SKU ${esc(TINGKAT[tk].replace('Siaga ',''))} lengkap</span></div>
+          <label for="cat-${esc(s.id)}">Catatan untuk mabigus (opsional)</label><input id="cat-${esc(s.id)}" maxlength="160" placeholder="mis. Diuji oleh Kak Budi">
+          <button class="btn ajukan" type="button" style="margin-top:10px">Ajukan pelantikan ${esc(TINGKAT[tk])}</button></section>`}).join('')
+          :'<div class="kosong"><b>Belum ada siswa yang siap</b><span>Siswa muncul di sini setelah semua butir SKU tingkatannya dicentang di menu SKU.</span></div>'}
+        <section class="card"><div class="kepala-bagian"><h2>Menunggu mabigus</h2><span class="pil">${menunggu.length}</span></div><div style="margin-top:6px">${riwayat(menunggu)}</div></section>
+        <section class="card"><h2>Riwayat</h2><div style="margin-top:6px">${riwayat(selesai)}</div></section>`;
+    }
+  }
+  isi.addEventListener('click',async e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    const kartu=b.closest('[data-id],[data-siswa]');
+    if(b.classList.contains('ajukan')){
+      const s=sis(kartu.dataset.siswa); b.disabled=true;
+      const {error}=await db.from('pengajuan_pelantikan').insert({siswa_id:s.id,gudep:p.gudep,tingkat:s.tingkat||'mula',status:'menunggu',
+        catatan_pembina:$('cat-'+s.id).value.trim()||null});
+      b.disabled=false; if(error) return toast('Gagal mengajukan: '+error.message);
+      toast('Pengajuan terkirim ke mabigus'); muat();
+    } else if(b.dataset.setuju){
+      const setuju=b.dataset.setuju==='1', id=kartu.dataset.id;
+      // Konfirmasi dengan ketuk kedua (dialog bawaan browser tidak dipakai)
+      if(b.dataset.yakin!=='1'){b.dataset.yakin='1';const t=b.textContent;b.textContent=setuju?'Ketuk lagi untuk menyetujui':'Ketuk lagi untuk menolak';
+        setTimeout(()=>{b.dataset.yakin='';b.textContent=t},3500);return}
+      kartu.querySelectorAll('button').forEach(x=>x.disabled=true);
+      const {error}=await db.rpc('putuskan_pelantikan',{p_id:id,p_setuju:setuju,p_catatan:$('cat-'+id).value.trim()||null});
+      if(error){kartu.querySelectorAll('button').forEach(x=>x.disabled=false);return toast('Gagal: '+error.message)}
+      toast(setuju?'Pelantikan disetujui':'Pengajuan ditolak');
+      if(setuju){const a=ajuan.find(x=>x.id===id),s=sis(a.siswa_id);s.tingkat_dilantik=a.tingkat;s.tingkat=TINGKAT_BERIKUT[a.tingkat]||a.tingkat}
+      muat();
+    }
+  });
+  $('gudep').onchange=gambar; muat();
+})();
+</script></body></html>

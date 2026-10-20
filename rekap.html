@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Rekap — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <div><div class="label" id="sub"></div><h1 id="judul">Rekap bulanan</h1></div>
+  <div class="baris-form tak-cetak">
+    <div><label for="bln">Bulan</label><select id="bln"></select></div>
+    <div><label for="thn">Tahun</label><input id="thn" type="number" inputmode="numeric"></div>
+    <div id="pilih-gudep" hidden><label for="gudep">Gudep</label><select id="gudep"><option value="">Semua Gudep</option><option value="05.093">05.093 Putra</option><option value="05.122">05.122 Putri</option></select></div>
+  </div>
+  <div class="grid" id="ringkasan"></div>
+  <div class="aksi tak-cetak">
+    <button class="btn" id="unduh" type="button">Unduh Excel (CSV)</button>
+    <button class="btn kedua" id="cetak" type="button">Cetak / simpan PDF</button>
+  </div>
+  <div class="geser"><table id="tabel"></table></div>
+  <p class="muted">H/S/I/A = jumlah Hadir, Sakit, Izin, Alfa pada bulan terpilih. Iuran = bulan lunas dari Januari sampai bulan terpilih.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="sku.js"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
+  const $=id=>document.getElementById(id);
+  const sekarang=new Date();
+  $('bln').innerHTML=NAMA_BULAN.map((n,i)=>`<option value="${i}">${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][i]}</option>`).join('');
+  $('bln').value=sekarang.getMonth(); $('thn').value=sekarang.getFullYear();
+  if(p.role==='mabigus') $('pilih-gudep').hidden=false;
+  const [semuaSiswa]=await Promise.all([ambilSiswa(p),muatMateriSku()]);
+  let baris=[];
+
+  async function muat(){
+    const b=+$('bln').value, t=+$('thn').value, g=p.role==='mabigus'?$('gudep').value:p.gudep;
+    const siswa=semuaSiswa.filter(s=>!g||s.gudep===g), ids=siswa.map(s=>s.id);
+    const namaBln=$('bln').selectedOptions[0].textContent;
+    $('sub').textContent=namaGudep(g||null); $('judul').textContent=`Rekap ${namaBln} ${t}`;
+    $('tabel').innerHTML='<tr><td><div class="kerangka" style="min-height:40px"></div></td></tr>';
+    const awal=`${t}-${String(b+1).padStart(2,'0')}-01`, akhir=new Date(t,b+1,0).toLocaleDateString('en-CA');
+    const kosong={data:[],error:null};
+    const [abs,iur,sku]=await Promise.all(ids.length?[
+      db.from('absensi_mingguan').select('siswa_id,tanggal,status').in('siswa_id',ids).gte('tanggal',awal).lte('tanggal',akhir),
+      db.from('iuran_bulanan').select('*').in('siswa_id',ids).eq('tahun',t),
+      db.from('pencapaian_sku').select('siswa_id,kode_sku').in('siswa_id',ids)
+    ]:[kosong,kosong,kosong]);
+    if(abs.error||iur.error||sku.error){tampilError($('tabel').parentElement,'Rekap gagal dimuat',abs.error||iur.error||sku.error);return}
+    const latihan=new Set(abs.data.map(r=>r.tanggal)).size;
+    baris=siswa.map(s=>{
+      const a=abs.data.filter(r=>r.siswa_id===s.id), n=k=>a.filter(r=>r.status===k).length;
+      const r=iur.data.find(r=>r.siswa_id===s.id)||{}, lunas=BULAN.slice(0,b+1).filter(x=>r[x]).length;
+      const tk=s.tingkat||'mula', pr=progresSku(new Set(sku.data.filter(x=>x.siswa_id===s.id).map(x=>x.kode_sku)))[tk];
+      return {nama:s.nama,nis:s.nis_nip,kelas:s.kelas||'',gudep:s.gudep,H:n('H'),S:n('S'),I:n('I'),A:n('A'),
+        pct:a.length?Math.round(n('H')/a.length*100):null,iuran:`${lunas}/${b+1}`,kurang:b+1-lunas,tingkat:TINGKAT[tk],sku:`${pr.lulus}/${pr.total}`};
+    });
+    const hadir=baris.reduce((x,r)=>x+r.H,0), total=baris.reduce((x,r)=>x+r.H+r.S+r.I+r.A,0);
+    const masuk=iur.data.reduce((x,r)=>x+BULAN.slice(0,b+1).filter(k=>r[k]).length,0);
+    $('ringkasan').innerHTML=`<div class="card"><div class="label">Latihan</div><div class="stat">${latihan}</div><div class="muted">pertemuan di bulan ini</div></div>
+      <div class="card"><div class="label">Kehadiran</div><div class="stat">${total?Math.round(hadir/total*100):0}%</div><div class="muted">${hadir} dari ${total} catatan</div></div>
+      <div class="card"><div class="label">Iuran s.d. ${NAMA_BULAN[b]}</div><div class="stat">${rupiah(masuk*IURAN_PER_BULAN)}</div><div class="muted">${masuk} pembayaran bulanan</div></div>`;
+    $('tabel').innerHTML=`<thead><tr><th>Nama</th><th>Kelas</th>${p.role==='mabigus'&&!g?'<th>Gudep</th>':''}<th>H</th><th>S</th><th>I</th><th>A</th><th>% Hadir</th><th>Iuran</th><th>Tingkatan</th><th>SKU</th></tr></thead><tbody>`+
+      (baris.length?baris.map(r=>`<tr><td>${esc(r.nama)}</td><td>${esc(r.kelas)}</td>${p.role==='mabigus'&&!g?`<td>${esc(GUDEP[r.gudep]||'')}</td>`:''}<td>${r.H}</td><td>${r.S}</td><td>${r.I}</td>
+        <td>${r.A?`<span class="pil ${r.A>=2?'merah':''}">${r.A}</span>`:0}</td><td>${r.pct??'—'}${r.pct!=null?'%':''}</td>
+        <td>${r.kurang>=3?`<span class="pil kuning">${r.iuran}</span>`:r.iuran}</td><td>${esc(r.tingkat)}</td><td>${r.sku}</td></tr>`).join('')
+        :'<tr><td colspan="11" style="text-align:center">Belum ada siswa.</td></tr>')+'</tbody>';
+  }
+
+  $('unduh').onclick=()=>{
+    const kolom=['Nama','NIS','Kelas','Gudep','Hadir','Sakit','Izin','Alfa','% Hadir','Iuran','Tingkatan','SKU'];
+    const sel=v=>{v=String(v??'');return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+    // "3 dari 10", bukan "3/10", agar Excel tidak mengubahnya menjadi tanggal
+    const dari=v=>v.replace('/',' dari ');
+    const isi=[kolom,...baris.map(r=>[r.nama,r.nis,r.kelas,r.gudep,r.H,r.S,r.I,r.A,r.pct??'',dari(r.iuran),r.tingkat,dari(r.sku)])].map(x=>x.map(sel).join(';')).join('\r\n');
+    const url=URL.createObjectURL(new Blob(['﻿'+isi],{type:'text/csv;charset=utf-8'}));
+    const a=document.createElement('a'); a.href=url; a.download=`rekap-pramuka-${$('thn').value}-${String(+$('bln').value+1).padStart(2,'0')}.csv`;
+    document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast('File rekap diunduh');
+  };
+  $('cetak').onclick=()=>window.print();
+  ['bln','thn','gudep'].forEach(id=>$(id).addEventListener('change',muat));
+  muat();
+})();
+</script></body></html>

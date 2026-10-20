@@ -1,42 +1,121 @@
 <!DOCTYPE html>
 <html lang="id"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Iuran — Pramuka SDN 3 Boloh</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Iuran &amp; Kas — Pramuka SDN 3 Boloh</title>
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
 <main>
-  <h1>Iuran bulanan</h1>
-  <label for="thn">Tahun</label><input type="number" id="thn">
-  <p class="muted" style="margin:10px 0">Geser ke samping. Ketuk bulan untuk menandai lunas.</p>
-  <div class="geser"><table id="tabel"></table></div>
+  <h1>Iuran &amp; kas</h1>
+  <div class="tab" role="tablist">
+    <button role="tab" id="tab-iuran" aria-selected="true" aria-controls="panel-iuran">Iuran bulanan</button>
+    <button role="tab" id="tab-kas" aria-selected="false" aria-controls="panel-kas">Kas keluar</button>
+  </div>
+
+  <section id="panel-iuran" role="tabpanel" aria-labelledby="tab-iuran" style="display:flex;flex-direction:column;gap:10px">
+    <div class="baris-form">
+      <div><label for="thn">Tahun</label><input type="number" id="thn" inputmode="numeric"></div>
+      <div><label for="cari">Cari siswa</label><input id="cari" type="search" placeholder="Ketik nama…"></div>
+    </div>
+    <p class="muted">Ketuk bulan untuk menandai lunas. Iuran <span id="nominal"></span> per bulan.</p>
+    <div id="daftar" style="display:flex;flex-direction:column;gap:10px"></div>
+  </section>
+
+  <section id="panel-kas" role="tabpanel" aria-labelledby="tab-kas" hidden style="display:flex;flex-direction:column;gap:12px">
+    <div class="grid" id="saldo"></div>
+    <form id="form-kas" class="card">
+      <h2>Catat pengeluaran</h2>
+      <div class="baris-form">
+        <div><label for="k-tgl">Tanggal</label><input type="date" id="k-tgl" required></div>
+        <div><label for="k-jml">Jumlah (Rp)</label><input type="number" id="k-jml" inputmode="numeric" min="1" step="1" required placeholder="25000"></div>
+      </div>
+      <label for="k-ket">Keperluan</label><input id="k-ket" required maxlength="100" placeholder="mis. Tali pramuka 10 gulung">
+      <button class="btn" style="margin-top:12px">Simpan pengeluaran</button>
+    </form>
+    <section class="card"><h2>Riwayat pengeluaran</h2><div id="riwayat" style="margin-top:6px"></div></section>
+  </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
-  const thn=document.getElementById('thn'), tabel=document.getElementById('tabel');
-  thn.value=new Date().getFullYear();
-  const siswa=await ambilSiswa(p);
-  const NAMA=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  const $=id=>document.getElementById(id);
+  const thn=$('thn'), box=$('daftar'), cari=$('cari');
+  thn.value=new Date().getFullYear(); $('k-tgl').value=hariIni(); $('nominal').textContent=rupiah(IURAN_PER_BULAN);
+  const siswa=await ambilSiswa(p), ids=siswa.map(s=>s.id);
+  let peta={};
 
-  async function muat(){
-    const {data}=await db.from('iuran_bulanan').select('*').eq('tahun',+thn.value);
-    const peta=Object.fromEntries((data||[]).map(r=>[r.siswa_id,r]));
-    tabel.innerHTML=`<tr><th>Nama</th>${NAMA.map(n=>`<th>${n}</th>`).join('')}</tr>`+
-      siswa.map(s=>`<tr data-id="${s.id}"><td>${s.nama}</td>${BULAN.map(b=>
-        `<td class="bln ${peta[s.id]?.[b]?'lunas':''}" data-b="${b}">${peta[s.id]?.[b]?'✓':''}</td>`).join('')}</tr>`).join('');
+  /* ---- Tab ---- */
+  function pilihTab(kas){
+    $('tab-iuran').setAttribute('aria-selected',!kas); $('tab-kas').setAttribute('aria-selected',kas);
+    $('panel-iuran').hidden=kas; $('panel-kas').hidden=!kas;
+    if(kas) muatKas();
   }
-  tabel.addEventListener('click',async e=>{
-    const td=e.target.closest('td.bln'); if(!td) return;
-    const nilai=!td.classList.contains('lunas');
-    td.classList.toggle('lunas',nilai); td.textContent=nilai?'✓':'';   // tampil dulu, batalkan jika gagal
-    const {error}=await db.from('iuran_bulanan')
-      .upsert({siswa_id:td.parentElement.dataset.id,tahun:+thn.value,[td.dataset.b]:nilai},{onConflict:'siswa_id,tahun'});
-    if(error){td.classList.toggle('lunas',!nilai);td.textContent=nilai?'':'✓';toast('Gagal: '+error.message)}
+  $('tab-iuran').onclick=()=>pilihTab(false); $('tab-kas').onclick=()=>pilihTab(true);
+
+  /* ---- Iuran ---- */
+  function gambar(){
+    const q=cari.value.trim().toLowerCase(), tahunIni=+thn.value===new Date().getFullYear(), bln=new Date().getMonth();
+    const list=siswa.filter(s=>s.nama.toLowerCase().includes(q));
+    if(!siswa.length){box.innerHTML='<div class="kosong"><b>Belum ada siswa di Gudep ini</b><span>Tambahkan siswa di menu <a href="anggota.html">Anggota</a>.</span></div>';return}
+    if(!list.length){box.innerHTML='<div class="kosong"><b>Tidak ada nama yang cocok</b></div>';return}
+    box.innerHTML=list.map(s=>{const r=peta[s.id]||{}, n=BULAN.filter(b=>r[b]).length;
+      return `<div class="card" data-id="${esc(s.id)}"><div class="siswa-kepala"><div><b>${esc(s.nama)}</b><div class="muted">${s.kelas?'Kelas '+esc(s.kelas):esc(s.nis_nip)}</div></div>
+        <span class="pil ${n===12?'hijau':''}" data-jml>${n}/12</span></div>
+        <div class="bulan12">${BULAN.map((b,i)=>`<button type="button" data-b="${b}" class="${r[b]?'lunas':(tahunIni&&i<=bln?'telat':'')}" aria-pressed="${!!r[b]}" aria-label="${NAMA_BULAN[i]} ${r[b]?'lunas':'belum'}">${NAMA_BULAN[i]}</button>`).join('')}</div></div>`}).join('');
+  }
+  async function muat(){
+    box.innerHTML='<div class="kerangka"></div><div class="kerangka"></div>';
+    if(!ids.length){peta={};gambar();return}
+    const {data,error}=await db.from('iuran_bulanan').select('*').eq('tahun',+thn.value).in('siswa_id',ids);
+    if(error){tampilError(box,'Iuran gagal dimuat',error);return}
+    peta=Object.fromEntries(data.map(r=>[r.siswa_id,r])); gambar();
+  }
+  box.addEventListener('click',async e=>{
+    const b=e.target.closest('button[data-b]'); if(!b) return;
+    const kartu=b.closest('.card'), id=kartu.dataset.id, bln=b.dataset.b, nilai=!b.classList.contains('lunas');
+    const ubah=v=>{b.classList.toggle('lunas',v);b.setAttribute('aria-pressed',v);peta[id]={...(peta[id]||{}),[bln]:v};
+      const n=BULAN.filter(x=>peta[id][x]).length, pil=kartu.querySelector('[data-jml]');pil.textContent=n+'/12';pil.classList.toggle('hijau',n===12)};
+    ubah(nilai);   // tampil dulu, batalkan jika gagal
+    const {error}=await db.from('iuran_bulanan').upsert({siswa_id:id,tahun:+thn.value,[bln]:nilai},{onConflict:'siswa_id,tahun'});
+    if(error){ubah(!nilai);toast('Gagal: '+error.message)}
   });
-  thn.addEventListener('change',muat); muat();
+  thn.addEventListener('change',muat); cari.addEventListener('input',gambar); muat();
+
+  /* ---- Kas keluar ---- */
+  async function muatKas(){
+    const riwayat=$('riwayat');
+    riwayat.innerHTML='<div class="kerangka"></div>';
+    const [klr,iur]=await Promise.all([
+      db.from('kas_keluar').select('*').eq('gudep',p.gudep).order('tanggal',{ascending:false}),
+      ids.length?db.from('iuran_bulanan').select('*').in('siswa_id',ids):{data:[],error:null}
+    ]);
+    if(klr.error){tampilError(riwayat,'Kas keluar gagal dimuat',klr.error);$('saldo').innerHTML='';return}
+    const masuk=(iur.data||[]).reduce((n,r)=>n+BULAN.filter(b=>r[b]).length,0)*IURAN_PER_BULAN;
+    const keluar=klr.data.reduce((n,r)=>n+(r.jumlah||0),0);
+    $('saldo').innerHTML=`<div class="card"><div class="label">Saldo kas</div><div class="stat">${rupiah(masuk-keluar)}</div><div class="muted">${esc(namaGudep(p.gudep))}</div></div>
+      <div class="card"><div class="label">Masuk</div><div class="stat" style="color:var(--hijau)">${rupiah(masuk)}</div><div class="muted">dari iuran</div></div>
+      <div class="card"><div class="label">Keluar</div><div class="stat" style="color:var(--merah)">${rupiah(keluar)}</div><div class="muted">${klr.data.length} pengeluaran</div></div>`;
+    riwayat.innerHTML=klr.data.length?`<ul class="daftar">${klr.data.map(r=>`<li><div><b>${esc(r.keterangan)}</b><div class="muted">${esc(tglPanjang(r.tanggal))}</div></div>
+      <div style="display:flex;gap:8px;align-items:center"><b style="font-variant-numeric:tabular-nums">${rupiah(r.jumlah)}</b><button class="tombol-hapus" data-id="${esc(r.id)}" aria-label="Hapus ${esc(r.keterangan)}">✕</button></div></li>`).join('')}</ul>`
+      :'<p class="muted">Belum ada pengeluaran yang dicatat.</p>';
+  }
+  $('riwayat').addEventListener('click',async e=>{
+    const b=e.target.closest('.tombol-hapus'); if(!b) return;
+    if(b.dataset.yakin!=='1'){b.dataset.yakin='1';b.textContent='Hapus?';setTimeout(()=>{b.dataset.yakin='';b.textContent='✕'},3000);return}
+    const {error}=await db.from('kas_keluar').delete().eq('id',b.dataset.id);
+    if(error) return toast('Gagal menghapus: '+error.message);
+    toast('Pengeluaran dihapus'); muatKas();
+  });
+  $('form-kas').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const {error}=await db.from('kas_keluar').insert({gudep:p.gudep,tanggal:$('k-tgl').value,keterangan:$('k-ket').value.trim(),jumlah:Math.round(+$('k-jml').value)});
+    if(error) return toast('Gagal menyimpan: '+error.message);
+    $('k-ket').value='';$('k-jml').value='';toast('Pengeluaran tersimpan');muatKas();
+  });
 })();
 </script></body></html>
