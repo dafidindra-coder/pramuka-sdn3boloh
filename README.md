@@ -20,3 +20,7 @@ pembina mengajukan → mabigus menyetujui atau menolak di menu Pelantikan → bi
 
 ## Konfigurasi
 Ubah `config.js`: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `DOMAIN_EMAIL`, dan `IURAN_PER_BULAN`.
+
+## Memperbarui aplikasi
+Setiap kali mengubah file `.js` atau `.css`, naikkan angka `?v=` di semua file `.html`
+(mis. `?v=20261020` menjadi tanggal hari ini) agar browser pengguna mengambil versi baru, bukan salinan lama dari cache.
