@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Butir SKU — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261020">
+<link rel="stylesheet" href="style.css?v=20261022">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -22,17 +22,17 @@
   <ul class="daftar card" id="daftar" style="padding:4px 14px"></ul>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261020"></script>
-<script src="sku.js?v=20261020"></script>
+<script src="config.js?v=20261022"></script>
+<script src="sku.js?v=20261022"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
   const $=id=>document.getElementById(id);
   if(p.role==='pembina') subNav($('subnav'),[['uji_sku.html','Uji siswa'],['kelola_sku.html','Kelola butir SKU']]); else $('subnav').remove();
-  const AWALAN={mula:'M',bantu:'B',tata:'T'};
+  const AWALAN={mula:'M',bantu:'B',tata:'T',ramu:'R'};
   let tingkat='mula', semua=[], dariDb=false, ubah=null;
 
-  $('tab').innerHTML=URUT_TINGKAT.map(t=>`<button role="tab" data-t="${t}" aria-selected="${t===tingkat}">${TINGKAT[t].replace('Siaga ','')}</button>`).join('');
+  $('tab').innerHTML=URUT_TINGKAT.map(t=>`<button role="tab" data-t="${t}" aria-selected="${t===tingkat}">${TINGKAT_PENDEK[t]}</button>`).join('');
   $('tab').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;tingkat=b.dataset.t;ubah=null;
     $('tab').querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected',x===b));gambar()};
 

@@ -17,7 +17,11 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BULAN = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'];
 const NAMA_BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
 const GUDEP = {'05.093':'Putra','05.122':'Putri'};
-const TINGKAT = {mula:'Siaga Mula',bantu:'Siaga Bantu',tata:'Siaga Tata'};
+const TINGKAT = {mula:'Siaga Mula',bantu:'Siaga Bantu',tata:'Siaga Tata',ramu:'Penggalang Ramu'};
+const TINGKAT_PENDEK = {mula:'Mula',bantu:'Bantu',tata:'Tata',ramu:'Ramu'};
+const GOLONGAN = {mula:'siaga',bantu:'siaga',tata:'siaga',ramu:'penggalang'};
+/* Siaga berkelompok dalam barung, Penggalang dalam regu */
+const namaKelompok = tk => GOLONGAN[tk||'mula']==='penggalang'?'Regu':'Barung';
 const hariIni = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD (lokal)
 
 /* Amankan teks sebelum dimasukkan ke innerHTML (mencegah XSS dari nama/keterangan) */
@@ -114,6 +118,14 @@ async function ambilSiswa(p,{termasukNonaktif=false}={}){
   const {data,error}=await q; if(error){toast('Gagal memuat siswa');return []}
   return termasukNonaktif?data:data.filter(s=>s.aktif!==false);
 }
+
+/* Watermark hak cipta di setiap halaman */
+document.addEventListener('DOMContentLoaded',()=>{
+  if(document.querySelector('.hak-cipta')) return;
+  const w=document.createElement('div'); w.className='hak-cipta';
+  w.textContent=`© ${new Date().getFullYear()} Dafid Indra Jaya Ningrat`;
+  document.body.append(w);
+});
 
 /* Pemasangan ke layar utama HP (PWA). Abaikan bila browser tidak mendukung. */
 if('serviceWorker' in navigator && location.protocol==='https:'){

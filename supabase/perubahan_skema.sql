@@ -67,13 +67,14 @@ do $$ declare b text; begin
   end loop;
 end $$;
 
-do $$ begin
-  alter table public.profil_pengguna add constraint profil_tingkat_valid check (tingkat in ('mula','bantu','tata'));
-exception when duplicate_object then null; end $$;
-do $$ begin
-  alter table public.profil_pengguna add constraint profil_tingkat_dilantik_valid
-    check (tingkat_dilantik is null or tingkat_dilantik in ('mula','bantu','tata'));
-exception when duplicate_object then null; end $$;
+-- Tingkatan yang dikenal: Siaga Mula/Bantu/Tata dan Penggalang Ramu.
+-- Aturan lama (tanpa 'ramu') diganti dengan yang baru.
+alter table public.profil_pengguna drop constraint if exists profil_tingkat_valid;
+alter table public.profil_pengguna drop constraint if exists profil_tingkat_dilantik_valid;
+alter table public.profil_pengguna add constraint profil_tingkat_valid
+  check (tingkat in ('mula','bantu','tata','ramu'));
+alter table public.profil_pengguna add constraint profil_tingkat_dilantik_valid
+  check (tingkat_dilantik is null or tingkat_dilantik in ('mula','bantu','tata','ramu'));
 
 -- Kunci unik yang dipakai aplikasi saat menyimpan (upsert).
 -- Bila gagal karena data ganda, hapus dulu baris gandanya (lihat panduan).
@@ -106,7 +107,7 @@ create table if not exists public.agenda (
 
 create table if not exists public.materi_sku (
   kode    text primary key,
-  tingkat text not null check (tingkat in ('mula','bantu','tata')),
+  tingkat text not null check (tingkat in ('mula','bantu','tata','ramu')),
   uraian  text not null,
   urutan  integer not null default 0,
   aktif   boolean not null default true
@@ -116,7 +117,7 @@ create table if not exists public.pengajuan_pelantikan (
   id              uuid primary key default gen_random_uuid(),
   siswa_id        uuid not null references public.profil_pengguna(id) on delete cascade,
   gudep           text not null,
-  tingkat         text not null check (tingkat in ('mula','bantu','tata')),
+  tingkat         text not null check (tingkat in ('mula','bantu','tata','ramu')),
   status          text not null default 'menunggu' check (status in ('menunggu','disetujui','ditolak')),
   catatan_pembina text,
   catatan_mabigus text,
@@ -125,6 +126,12 @@ create table if not exists public.pengajuan_pelantikan (
   diputus_oleh    uuid,
   diputus_pada    timestamptz
 );
+-- Tabel yang dibuat versi sebelumnya masih menolak 'ramu': ganti aturannya
+alter table public.materi_sku drop constraint if exists materi_sku_tingkat_check;
+alter table public.materi_sku add  constraint materi_sku_tingkat_check check (tingkat in ('mula','bantu','tata','ramu'));
+alter table public.pengajuan_pelantikan drop constraint if exists pengajuan_pelantikan_tingkat_check;
+alter table public.pengajuan_pelantikan add  constraint pengajuan_pelantikan_tingkat_check check (tingkat in ('mula','bantu','tata','ramu'));
+
 create unique index if not exists pengajuan_satu_menunggu
   on public.pengajuan_pelantikan (siswa_id, tingkat) where status = 'menunggu';
 
@@ -296,7 +303,8 @@ begin
   if p_setuju then
     update public.profil_pengguna
        set tingkat_dilantik = r.tingkat,
-           tingkat = case r.tingkat when 'mula' then 'bantu' when 'bantu' then 'tata' else 'tata' end
+           -- Siaga naik Mula > Bantu > Tata. Pindah ke Penggalang Ramu diatur pembina di menu Anggota.
+           tingkat = case r.tingkat when 'mula' then 'bantu' when 'bantu' then 'tata' else r.tingkat end
      where id = r.siswa_id;
   end if;
 end $$;
@@ -322,7 +330,15 @@ insert into public.materi_sku (kode, tingkat, uraian, urutan) values
  ('T-03','tata','Mengenal sandi morse huruf A–J',3),('T-04','tata','Membuat tandu sederhana dari tongkat dan tali',4),
  ('T-05','tata','Mengenal delapan arah mata angin',5),('T-06','tata','Memimpin barung dalam permainan',6),
  ('T-07','tata','Menabung secara teratur',7),('T-08','tata','Menolong teman yang kesulitan',8),
- ('T-09','tata','Lari 50 meter atau ketangkasan sejenis',9),('T-10','tata','Bercerita tentang pahlawan nasional',10)
+ ('T-09','tata','Lari 50 meter atau ketangkasan sejenis',9),('T-10','tata','Bercerita tentang pahlawan nasional',10),
+ ('R-01','ramu','Taat menjalankan ibadah sesuai agamanya',1),('R-02','ramu','Hafal dan memahami Trisatya dan Dasadarma',2),
+ ('R-03','ramu','Mengetahui sejarah Gerakan Pramuka dan Bapak Pandu Sedunia',3),('R-04','ramu','Menjelaskan arti lambang Gerakan Pramuka',4),
+ ('R-05','ramu','Hafal lagu Indonesia Raya dan dua lagu wajib nasional',5),('R-06','ramu','Mengetahui susunan dan tata cara upacara bendera',6),
+ ('R-07','ramu','Melakukan baris-berbaris dan tata upacara',7),('R-08','ramu','Membuat enam macam simpul dan ikatan',8),
+ ('R-09','ramu','Mengenal sandi morse atau semaphore',9),('R-10','ramu','Mengenal tanda jejak dan menggunakannya',10),
+ ('R-11','ramu','Menaksir tinggi pohon dan lebar sungai',11),('R-12','ramu','Memberi pertolongan pertama pada luka ringan',12),
+ ('R-13','ramu','Membaca kompas dan mengenal delapan arah mata angin',13),('R-14','ramu','Menabung secara teratur',14),
+ ('R-15','ramu','Berkemah satu malam bersama regu',15)
 on conflict (kode) do nothing;
 
 -- Catatan: kode SKU lama (SKU-01 s.d. SKU-05) dari versi awal aplikasi tidak dihapus,

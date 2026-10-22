@@ -1,4 +1,4 @@
-/* Daftar SKU Siaga per tingkatan.
+/* Daftar SKU per tingkatan (Siaga Mula/Bantu/Tata dan Penggalang Ramu).
    Sumber utama: tabel materi_sku (bisa diubah di menu SKU > Kelola butir).
    Daftar di bawah hanya cadangan bila tabel belum dibuat — CONTOH, samakan dengan buku SKU resmi. */
 const MATERI_SKU = {
@@ -37,10 +37,30 @@ const MATERI_SKU = {
     ['T-08','Menolong teman yang kesulitan'],
     ['T-09','Lari 50 meter atau ketangkasan sejenis'],
     ['T-10','Bercerita tentang pahlawan nasional']
+  ],
+  ramu: [
+    ['R-01','Taat menjalankan ibadah sesuai agamanya'],
+    ['R-02','Hafal dan memahami Trisatya dan Dasadarma'],
+    ['R-03','Mengetahui sejarah Gerakan Pramuka dan Bapak Pandu Sedunia'],
+    ['R-04','Menjelaskan arti lambang Gerakan Pramuka'],
+    ['R-05','Hafal lagu Indonesia Raya dan dua lagu wajib nasional'],
+    ['R-06','Mengetahui susunan dan tata cara upacara bendera'],
+    ['R-07','Melakukan baris-berbaris dan tata upacara'],
+    ['R-08','Membuat enam macam simpul dan ikatan'],
+    ['R-09','Mengenal sandi morse atau semaphore'],
+    ['R-10','Mengenal tanda jejak dan menggunakannya'],
+    ['R-11','Menaksir tinggi pohon dan lebar sungai'],
+    ['R-12','Memberi pertolongan pertama pada luka ringan'],
+    ['R-13','Membaca kompas dan mengenal delapan arah mata angin'],
+    ['R-14','Menabung secara teratur'],
+    ['R-15','Berkemah satu malam bersama regu']
   ]
 };
-const URUT_TINGKAT = ['mula','bantu','tata'];
-const TINGKAT_BERIKUT = {mula:'bantu',bantu:'tata',tata:null};
+const URUT_TINGKAT = ['mula','bantu','tata','ramu'];
+// Setelah dilantik, SKU berikutnya yang ditempuh. Pindah dari Siaga ke Penggalang diatur pembina (menu Anggota).
+const TINGKAT_BERIKUT = {mula:'bantu',bantu:'tata',tata:null,ramu:null};
+/* Tingkatan dalam golongan yang sama, mis. untuk Penggalang hanya Ramu */
+const tingkatSegolongan = tk => URUT_TINGKAT.filter(t=>GOLONGAN[t]===GOLONGAN[tk||'mula']);
 
 /* Muat butir SKU aktif dari database ke MATERI_SKU. Kembalikan semua baris (termasuk nonaktif) untuk halaman kelola. */
 async function muatMateriSku(){

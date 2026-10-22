@@ -3,26 +3,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
-<title>Barung — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261020">
+<title>Barung &amp; Regu — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css?v=20261022">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
 <main>
   <nav id="subnav"></nav>
-  <div><div class="label" id="sub"></div><h1>Barung</h1></div>
+  <div><div class="label" id="sub"></div><h1>Barung &amp; Regu</h1></div>
   <div id="pilih-gudep" hidden><label for="gudep">Gudep</label><select id="gudep"><option value="">Semua Gudep</option><option value="05.093">05.093 Putra</option><option value="05.122">05.122 Putri</option></select></div>
   <div class="grid" id="ringkasan"></div>
   <div id="daftar" style="display:flex;flex-direction:column;gap:12px"><div class="kerangka"></div><div class="kerangka"></div></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261020"></script>
-<script src="sku.js?v=20261020"></script>
+<script src="config.js?v=20261022"></script>
+<script src="sku.js?v=20261022"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
   const $=id=>document.getElementById(id);
-  if(p.role==='pembina') subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung'],['pelantikan.html','Pelantikan']]);
+  if(p.role==='pembina') subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung/Regu'],['pelantikan.html','Pelantikan']]);
   else {$('subnav').remove();$('pilih-gudep').hidden=false}
   const [siswa]=await Promise.all([ambilSiswa(p),muatMateriSku()]);
   const ids=siswa.map(s=>s.id), kosong={data:[],error:null};
@@ -46,14 +46,14 @@
     daftar.forEach(s=>{const k=(s.barung?s.barung:'')+'|'+s.gudep;(kelompok[k]=kelompok[k]||[]).push(s)});
     const urut=Object.entries(kelompok).sort(([a],[b])=>(a.startsWith('|')?1:0)-(b.startsWith('|')?1:0)||a.localeCompare(b));
     const jmlBarung=urut.filter(([k])=>!k.startsWith('|')).length, tanpa=daftar.filter(s=>!s.barung).length;
-    $('ringkasan').innerHTML=`<div class="card"><div class="label">Barung</div><div class="stat">${jmlBarung}</div><div class="muted">${daftar.length} siswa aktif</div></div>
-      <div class="card"><div class="label">Belum punya barung</div><div class="stat">${tanpa}</div><div class="muted">${tanpa?(p.role==='pembina'?'atur di Daftar siswa':'minta pembina mengatur'):'semua sudah terbagi'}</div></div>`;
+    $('ringkasan').innerHTML=`<div class="card"><div class="label">Barung &amp; regu</div><div class="stat">${jmlBarung}</div><div class="muted">${daftar.length} siswa aktif</div></div>
+      <div class="card"><div class="label">Belum berkelompok</div><div class="stat">${tanpa}</div><div class="muted">${tanpa?(p.role==='pembina'?'atur di Daftar siswa':'minta pembina mengatur'):'semua sudah terbagi'}</div></div>`;
     $('daftar').innerHTML=urut.length?urut.map(([k,anggota])=>{
       const [nama,gudep]=k.split('|');
       const t=anggota.reduce((x,s)=>x+info[s.id].total,0), h=anggota.reduce((x,s)=>x+info[s.id].hadir,0), siap=anggota.filter(s=>info[s.id].siap).length;
       return `<section class="card barung"><div class="kepala-bagian" style="margin:0"><div style="display:flex;gap:10px;align-items:center">
           <span class="bendera" style="--warna:${warnaBarung(nama)}" aria-hidden="true">${ikon('barung')}</span>
-          <div><h2>${nama?'Barung '+esc(nama):'Belum punya barung'}</h2><div class="muted">${anggota.length} anggota${p.role==='mabigus'&&!g?' · '+esc(GUDEP[gudep]||gudep):''}</div></div></div>
+          <div><h2>${nama?(anggota.every(s=>GOLONGAN[s.tingkat||'mula']==='penggalang')?'Regu ':'Barung ')+esc(nama):'Belum punya barung/regu'}</h2><div class="muted">${anggota.length} anggota${p.role==='mabigus'&&!g?' · '+esc(GUDEP[gudep]||gudep):''}</div></div></div>
           <div style="text-align:right"><b style="font-variant-numeric:tabular-nums">${t?Math.round(h/t*100):0}%</b><div class="muted">hadir</div></div></div>
         ${siap?`<p style="margin-top:8px"><span class="pil kuning">${siap} siap dilantik</span></p>`:''}
         <ul class="daftar" style="margin-top:8px">${anggota.map(s=>{const x=info[s.id], pr=x.pr[x.tk];

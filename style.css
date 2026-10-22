@@ -203,3 +203,11 @@ textarea{resize:vertical;line-height:1.4}
 #toast.show{opacity:1}
 
 @media print{.atas,.bawah,.tak-cetak{display:none!important}body{background:#fff;padding:0}.card,.geser{border:0;box-shadow:none}}
+
+/* Watermark hak cipta */
+.hak-cipta{position:fixed;right:10px;bottom:calc(6px + env(safe-area-inset-bottom,0px));z-index:9;pointer-events:none;
+  font-size:.64rem;letter-spacing:.02em;color:var(--teks-2);background:color-mix(in srgb,var(--latar) 88%,transparent);
+  padding:2px 8px;border-radius:999px}
+body.ada-menu .hak-cipta{bottom:calc(66px + env(safe-area-inset-bottom,0px))}
+body{padding-bottom:26px}
+body.ada-menu{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}

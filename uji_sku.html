@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Uji SKU — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261020">
+<link rel="stylesheet" href="style.css?v=20261022">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -23,8 +23,8 @@
   <div id="daftar" style="display:flex;flex-direction:column;gap:10px"></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261020"></script>
-<script src="sku.js?v=20261020"></script>
+<script src="config.js?v=20261022"></script>
+<script src="sku.js?v=20261022"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
@@ -45,12 +45,12 @@
   }
   async function muat(){
     const s=siswa.find(x=>x.id===pilih.value), tk=s.tingkat||'mula';
-    profil.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap">${s.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[s.tingkat_dilantik].replace('Siaga ',''))}</span>`:''}<span class="pil">Menempuh ${esc(TINGKAT[tk])}</span>${s.kelas?`<span class="pil">Kelas ${esc(s.kelas)}</span>`:''}${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}</div>`;
+    profil.innerHTML=`<div style="display:flex;gap:6px;flex-wrap:wrap">${s.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[s.tingkat_dilantik])}</span>`:''}<span class="pil">Menempuh ${esc(TINGKAT[tk])}</span>${s.kelas?`<span class="pil">Kelas ${esc(s.kelas)}</span>`:''}${s.barung?`<span class="pil">${namaKelompok(tk)} ${esc(s.barung)}</span>`:''}</div>`;
     box.innerHTML='<div class="kerangka"></div>';
     const {data,error}=await db.from('pencapaian_sku').select('kode_sku,tanggal').eq('siswa_id',pilih.value);
     if(error){tampilError(box,'Data SKU gagal dimuat',error);return}
     tanggal=Object.fromEntries(data.map(r=>[r.kode_sku,r.tanggal]));
-    box.innerHTML=URUT_TINGKAT.map(t=>`<details class="tingkat" data-t="${t}" ${t===tk?'open':''}><summary>${kepalaTingkat(t)}</summary>
+    box.innerHTML=tingkatSegolongan(tk).map(t=>`<details class="tingkat" data-t="${t}" ${t===tk?'open':''}><summary>${kepalaTingkat(t)}</summary>
       ${MATERI_SKU[t].map(([k,teks])=>`<label class="cek"><input type="checkbox" data-k="${k}" ${tanggal[k]?'checked':''}>
       <span><b>${esc(teks)}</b><br><span class="muted" id="t-${k}">${tanggal[k]?'Lulus '+esc(tglPendek(tanggal[k])):'Belum lulus'}</span></span></label>`).join('')}</details>`).join('');
   }
