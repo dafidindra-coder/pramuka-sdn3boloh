@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Anggota — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261020">
+<link rel="stylesheet" href="style.css?v=20261022">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -15,7 +15,7 @@
     <div><label for="cari">Cari</label><input id="cari" type="search" placeholder="Nama atau NIS…"></div>
     <div><label for="saring">Tampilkan</label><select id="saring">
       <option value="aktif">Siswa aktif</option><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option>
-      <option value="tata">Siaga Tata</option><option value="nonaktif">Nonaktif / lulus</option></select></div>
+      <option value="tata">Siaga Tata</option><option value="ramu">Penggalang Ramu</option><option value="nonaktif">Nonaktif / lulus</option></select></div>
   </div>
   <p class="muted" id="jumlah"></p>
   <div id="daftar" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -30,8 +30,8 @@
     </div>
     <label for="f-nama">Nama lengkap</label><input id="f-nama" required maxlength="80">
     <div class="baris-form">
-      <div><label for="f-tingkat">SKU yang ditempuh</label><select id="f-tingkat"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></select></div>
-      <div><label for="f-barung">Barung</label><input id="f-barung" maxlength="20" placeholder="mis. Merah" list="daftar-barung"><datalist id="daftar-barung"></datalist></div>
+      <div><label for="f-tingkat">SKU yang ditempuh</label><select id="f-tingkat"><optgroup label="Siaga"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></optgroup><optgroup label="Penggalang"><option value="ramu">Penggalang Ramu</option></optgroup></select></div>
+      <div><label for="f-barung">Barung / Regu</label><input id="f-barung" maxlength="20" placeholder="mis. Merah" list="daftar-barung"><datalist id="daftar-barung"></datalist></div>
     </div>
     <label for="f-hp">No. HP orang tua</label><input id="f-hp" type="tel" inputmode="tel" maxlength="16" placeholder="08…">
     <div id="baris-sandi"><label for="f-sandi">Kata sandi awal</label><input id="f-sandi" minlength="6" autocomplete="new-password" placeholder="minimal 6 karakter">
@@ -43,12 +43,12 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261020"></script>
+<script src="config.js?v=20261022"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
   const $=id=>document.getElementById(id);
-  subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung'],['pelantikan.html','Pelantikan']]);
+  subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung/Regu'],['pelantikan.html','Pelantikan']]);
   const box=$('daftar'), dlg=$('dlg');
   let siswa=[], edit=null;
 
@@ -65,7 +65,7 @@
     box.innerHTML=list.length?list.map(s=>`<div class="card"><div class="siswa-kepala"><div><b>${esc(s.nama)}</b>
         <div class="muted">NIS ${esc(s.nis_nip)}${s.kelas?' · Kelas '+esc(s.kelas):''}</div></div>
         <button class="btn kedua kecil" data-edit="${esc(s.id)}" type="button">Ubah</button></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${s.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[s.tingkat_dilantik].replace('Siaga ',''))}</span>`:''}<span class="pil">${esc(TINGKAT[s.tingkat||'mula'])}</span>${s.barung?`<span class="pil">Barung ${esc(s.barung)}</span>`:''}${s.aktif===false?'<span class="pil merah">Nonaktif</span>':''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${s.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[s.tingkat_dilantik])}</span>`:''}<span class="pil">${esc(TINGKAT[s.tingkat||'mula'])}</span>${s.barung?`<span class="pil">${namaKelompok(s.tingkat)} ${esc(s.barung)}</span>`:''}${s.aktif===false?'<span class="pil merah">Nonaktif</span>':''}</div>
       <div class="muted" style="margin-top:8px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>HP ortu: ${s.hp_ortu?`<b style="user-select:all">${esc(s.hp_ortu)}</b>`:'—'}</span>
         <a href="uji_sku.html?siswa=${encodeURIComponent(s.id)}">Buka SKU ›</a></div></div>`).join('')
       :'<div class="kosong"><b>Tidak ada siswa</b><span>Ubah pencarian atau saringan, atau tambah siswa baru.</span></div>';

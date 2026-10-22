@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Pelantikan — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261020">
+<link rel="stylesheet" href="style.css?v=20261022">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -16,13 +16,13 @@
   <div id="isi" style="display:flex;flex-direction:column;gap:12px"><div class="kerangka"></div></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261020"></script>
-<script src="sku.js?v=20261020"></script>
+<script src="config.js?v=20261022"></script>
+<script src="sku.js?v=20261022"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
   const $=id=>document.getElementById(id), isi=$('isi'), mabigus=p.role==='mabigus';
-  if(!mabigus) subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung'],['pelantikan.html','Pelantikan']]);
+  if(!mabigus) subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung/Regu'],['pelantikan.html','Pelantikan']]);
   else {$('subnav').remove();$('pilih-gudep').hidden=false}
   $('penjelasan').textContent=mabigus
     ?'Pembina mengajukan siswa yang sudah menyelesaikan semua butir SKU. Periksa lalu setujui atau tolak. Bila disetujui, tingkatan siswa naik otomatis.'
@@ -61,7 +61,7 @@
     if(mabigus){
       isi.innerHTML=`<section><div class="kepala-bagian"><h2>Menunggu persetujuan</h2><span class="pil ${menunggu.length?'kuning':'hijau'}">${menunggu.length}</span></div></section>
         ${menunggu.length?menunggu.map(a=>{const s=sis(a.siswa_id);return `<section class="card" data-id="${esc(a.id)}">
-          <div class="siswa-kepala"><div><b>${esc(s.nama)}</b><div class="muted">${esc(namaGudep(a.gudep))}${s.kelas?' · Kelas '+esc(s.kelas):''}${s.barung?' · Barung '+esc(s.barung):''}</div></div>
+          <div class="siswa-kepala"><div><b>${esc(s.nama)}</b><div class="muted">${esc(namaGudep(a.gudep))}${s.kelas?' · Kelas '+esc(s.kelas):''}${s.barung?' · '+namaKelompok(s.tingkat)+' '+esc(s.barung):''}</div></div>
           <span class="pil">${esc(TINGKAT[a.tingkat])}</span></div>
           <p class="muted" style="margin-top:6px">Diajukan ${esc(tgl(a.diajukan_pada))}${a.catatan_pembina?` · “${esc(a.catatan_pembina)}”`:''}</p>
           ${kartuSku(s,a.tingkat)}
@@ -73,7 +73,7 @@
       const siap=siswa.filter(s=>s.aktif!==false&&statusSiswaSku(s,lulus[s.id]||new Set()).siap&&!menunggu.some(a=>a.siswa_id===s.id));
       isi.innerHTML=`<section><div class="kepala-bagian"><h2>Siap diajukan</h2><span class="pil ${siap.length?'kuning':''}">${siap.length}</span></div></section>
         ${siap.length?siap.map(s=>{const tk=s.tingkat||'mula';return `<section class="card" data-siswa="${esc(s.id)}">
-          <div class="siswa-kepala"><div><b>${esc(s.nama)}</b><div class="muted">${s.kelas?'Kelas '+esc(s.kelas):''}${s.barung?' · Barung '+esc(s.barung):''}</div></div><span class="pil hijau">SKU ${esc(TINGKAT[tk].replace('Siaga ',''))} lengkap</span></div>
+          <div class="siswa-kepala"><div><b>${esc(s.nama)}</b><div class="muted">${s.kelas?'Kelas '+esc(s.kelas):''}${s.barung?' · '+namaKelompok(s.tingkat)+' '+esc(s.barung):''}</div></div><span class="pil hijau">SKU ${esc(TINGKAT[tk].replace('Siaga ',''))} lengkap</span></div>
           <label for="cat-${esc(s.id)}">Catatan untuk mabigus (opsional)</label><input id="cat-${esc(s.id)}" maxlength="160" placeholder="mis. Diuji oleh Kak Budi">
           <button class="btn ajukan" type="button" style="margin-top:10px">Ajukan pelantikan ${esc(TINGKAT[tk])}</button></section>`}).join('')
           :'<div class="kosong"><b>Belum ada siswa yang siap</b><span>Siswa muncul di sini setelah semua butir SKU tingkatannya dicentang di menu SKU.</span></div>'}

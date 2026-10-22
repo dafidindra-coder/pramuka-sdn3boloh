@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       return json({ error: /already|registered|exists/i.test(galatAkun?.message ?? '') ? 'Nomor ini sudah punya akun.' : galatAkun?.message }, 400);
 
     const profil = role === 'siswa'
-      ? { tingkat: ['mula', 'bantu', 'tata'].includes(b.tingkat) ? b.tingkat : 'mula',
+      ? { tingkat: ['mula', 'bantu', 'tata', 'ramu'].includes(b.tingkat) ? b.tingkat : 'mula',
           kelas: teks(b.kelas, 5), barung: teks(b.barung, 20), hp_ortu: teks(b.hp_ortu, 16) }
       : { no_hp: teks(b.no_hp, 16) };
     const { error: galatProfil } = await admin.from('profil_pengguna').upsert({

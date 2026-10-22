@@ -7,6 +7,8 @@ Aplikasi administrasi kepramukaan SDN 3 Boloh (Gudep 05.093 Putra & 05.122 Putri
 - **Mabigus**: tambah/ubah pembina, lihat barung semua Gudep, setujui atau tolak pelantikan golongan, agenda, rekap semua Gudep.
 - **Siswa**: kehadiran, iuran, tingkatan, dan progres SKU miliknya sendiri.
 
+Golongan yang didukung: **Siaga** (Mula, Bantu, Tata; berkelompok dalam barung) dan **Penggalang Ramu** (berkelompok dalam regu).
+
 ## Pemasangan di Supabase (sekali saja)
 Ikuti **[supabase/PANDUAN.md](supabase/PANDUAN.md)** langkah demi langkah. Ringkasnya:
 1. Jalankan `supabase/perubahan_skema.sql` di SQL Editor (struktur tabel + aturan akses).

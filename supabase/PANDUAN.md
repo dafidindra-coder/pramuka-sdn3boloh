@@ -1,5 +1,8 @@
 # Panduan menyambungkan aplikasi ke Supabase
 
+> **Sudah pernah menjalankan `perubahan_skema.sql`?** Setiap kali file itu diperbarui (misalnya penambahan
+> golongan Penggalang Ramu), jalankan ulang seluruh isinya di SQL Editor. File ini aman diulang dan tidak menghapus data.
+
 Lakukan berurutan. Semua langkah dikerjakan di https://supabase.com/dashboard, proyek **rdilqnpfbszwvktzmxts**.
 
 ## 1. Cadangkan data (bila database sudah berisi data)

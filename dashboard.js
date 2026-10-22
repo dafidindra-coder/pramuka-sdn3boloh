@@ -99,7 +99,7 @@
     const h=hitung(siswa);
     isi.innerHTML=`<div><div class="label">${esc(namaGudep(p.gudep))}</div><h1>Halo, Kak ${esc(p.nama.split(' ')[0])}</h1></div>
       <div class="grid">
-        ${kartu('Siswa aktif',siswa.length,'anggota Siaga')}
+        ${kartu('Siswa aktif',siswa.length,'anggota')}
         ${kartu('Kehadiran',h.pct+'%',`${h.hadir} dari ${h.total} catatan`)}
         ${kartu('Saldo kas',rupiah(h.masuk-h.keluar),`Masuk ${rupiah(h.masuk)} · Keluar ${rupiah(h.keluar)}`)}
         ${kartu('SKU lulus',h.skuN,h.siap?`<span class="pil hijau">${h.siap} siap dilantik</span>`:'butir materi')}
@@ -107,7 +107,7 @@
       <a class="btn" href="absensi.html">${ikon('absen')} Absen hari ini</a>
       <div class="ubin-grid">
         ${ubin('anggota.html#tambah','anggota','Tambah siswa','atau ubah data siswa')}
-        ${ubin('barung.html','barung','Barung',`${new Set(siswa.map(s=>s.barung).filter(Boolean)).size} barung`)}
+        ${ubin('barung.html','barung','Barung &amp; Regu',`${new Set(siswa.map(s=>s.barung).filter(Boolean)).size} kelompok`)}
         ${ubin('pelantikan.html','pelantikan','Pelantikan',menunggu.length?`${menunggu.length} menunggu mabigus`:h.siap?`${h.siap} siap diajukan`:'ajukan &amp; pantau')}
         ${ubin('kelola_sku.html','sku','Butir SKU','tambah &amp; ubah kecakapan')}
         ${ubin('rekap.html','rekap','Rekap','unduh &amp; cetak')}
@@ -122,7 +122,7 @@
       ${menunggu.length?`<a class="sorotan" href="pelantikan.html">${ikon('pelantikan')}<span><b>${menunggu.length} pengajuan pelantikan menunggu persetujuan</b><small>Ketuk untuk memeriksa dan memutuskan</small></span><span aria-hidden="true">›</span></a>`:''}
       <div class="ubin-grid">
         ${ubin('pembina.html','pembina','Pembina','tambah &amp; ubah')}
-        ${ubin('barung.html','barung','Barung',`${new Set(siswa.filter(s=>s.barung).map(s=>s.gudep+'|'+s.barung)).size} barung`)}
+        ${ubin('barung.html','barung','Barung &amp; Regu',`${new Set(siswa.filter(s=>s.barung).map(s=>s.gudep+'|'+s.barung)).size} kelompok`)}
         ${ubin('pelantikan.html','pelantikan','Pelantikan',menunggu.length?`${menunggu.length} menunggu`:'tidak ada antrean')}
         ${ubin('kelola_sku.html','sku','Butir SKU','tambah &amp; ubah')}
       </div>
@@ -144,14 +144,14 @@
     const ajuanSaya=menunggu.find(m=>m.siswa_id===p.id);
     const STATUS={H:['Hadir','hijau'],S:['Sakit','kuning'],I:['Izin',''],A:['Alfa','merah']};
     isi.innerHTML=`<section class="card"><div class="label">${esc(namaGudep(p.gudep))}${p.kelas?' · Kelas '+esc(p.kelas):''}</div><h1>${esc(p.nama)}</h1>
-        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${p.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[p.tingkat_dilantik])}</span>`:'<span class="pil">Calon Siaga</span>'}
-          ${p.tingkat_dilantik!==tk?`<span class="pil">Menempuh SKU ${esc(TINGKAT[tk].replace('Siaga ',''))}</span>`:''}${p.barung?`<span class="pil">Barung ${esc(p.barung)}</span>`:''}</div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${p.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[p.tingkat_dilantik])}</span>`:`<span class="pil">Calon ${GOLONGAN[tk]==='penggalang'?'Penggalang':'Siaga'}</span>`}
+          ${p.tingkat_dilantik!==tk?`<span class="pil">Menempuh SKU ${esc(TINGKAT_PENDEK[tk])}</span>`:''}${p.barung?`<span class="pil">${namaKelompok(tk)} ${esc(p.barung)}</span>`:''}</div>
         ${ajuanSaya?`<p class="info" style="margin-top:10px">Pelantikan ${esc(TINGKAT[ajuanSaya.tingkat])} sudah diajukan pembina dan menunggu persetujuan mabigus.</p>`:''}</section>
       <div class="grid">${kartu('Kehadiran',pct+'%',`${hadir} dari ${a.length} latihan`)}${kartu('Iuran '+tahun,lunas+'/12',kurang?`<span class="pil kuning">kurang ${kurang} bulan</span>`:'<span class="pil hijau">lancar</span>')}
-        ${kartu('SKU '+TINGKAT[tk].replace('Siaga ',''),`${pr[tk].lulus}/${pr[tk].total}`,siap?'<span class="pil hijau">siap dilantik</span>':'butir lulus')}</div>
+        ${kartu('SKU '+TINGKAT_PENDEK[tk],`${pr[tk].lulus}/${pr[tk].total}`,siap?'<span class="pil hijau">siap dilantik</span>':'butir lulus')}</div>
       <section class="card"><h2>Iuran ${tahun}</h2><div class="bulan12">${BULAN.map((b,i)=>`<span class="${r[b]?'lunas':i<=bulanIni?'telat':''}" title="${NAMA_BULAN[i]}: ${r[b]?'lunas':'belum'}">${NAMA_BULAN[i]}</span>`).join('')}</div>
         <p class="muted" style="margin-top:8px">Hijau = lunas · garis merah = belum dibayar</p></section>
-      <section class="card"><h2>Kecakapan (SKU)</h2><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${URUT_TINGKAT.map(t=>`<div>
+      <section class="card"><h2>Kecakapan (SKU)</h2><div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">${tingkatSegolongan(tk).map(t=>`<div>
         <div class="kepala-bagian" style="margin:0 0 4px"><span>${esc(TINGKAT[t])}</span><span class="muted">${pr[t].lulus}/${pr[t].total}</span></div>
         <div class="progres ${skuPenuh(pr[t])?'penuh':''}"><i style="width:${lebarPersen(pr[t])}%"></i></div></div>`).join('')}</div>
         <details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Lihat butir ${esc(TINGKAT[tk])}</summary><ul class="daftar" style="margin-top:6px">${MATERI_SKU[tk].map(([k,t])=>
