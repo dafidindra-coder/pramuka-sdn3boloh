@@ -24,8 +24,11 @@ dan dirancang agar tetap di paket gratis Firebase (Spark) untuk sekitar 300 sisw
 
 ## Logo sekolah
 Logo tampil di halaman masuk, di kepala aplikasi, di kartu siswa, dan di kop laporan cetak. Untuk
-menggantinya, timpa file **`public/logo.png`** (PNG persegi, latar transparan, sekitar 300–400 piksel),
-lalu jalankan `firebase deploy` lagi.
+menggantinya, timpa tiga file di folder `public/` lalu jalankan `firebase deploy` lagi:
+- **`logo.webp`**: logo tajam (persegi, latar transparan, sekitar 512 piksel), dipakai di aplikasi, kartu, dan kop laporan.
+- **`logo-latar.webp`**: versi buram untuk latar kartu. Sengaja dibuat buram di file gambarnya,
+  bukan dengan efek CSS, supaya hasil cetak/PDF tetap halus.
+- **`logo.png`**: ikon kecil (192 piksel) untuk tab browser dan layar utama HP.
 
 ## Uji coba lokal tanpa project Firebase
 
@@ -121,7 +124,7 @@ bisa menghapus tanggal itu dari daftar hari efektif di menu Laporan.
 ## Struktur file
 ```
 public/index.html          tampilan dan gaya (warna mengikuti logo sekolah)
-public/logo.png            logo sekolah (boleh diganti)
+public/logo.webp, logo-latar.webp, logo.png   logo sekolah (boleh diganti)
 public/app.js              logika aplikasi
 public/firebase-config.js  konfigurasi project Firebase (wajib diisi)
 firestore.rules            aturan akses database (peran kepala sekolah/guru, validasi foto)

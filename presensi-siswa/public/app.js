@@ -16,14 +16,15 @@ import {
 /* ---------- mode uji lokal (Firebase Emulator) ---------- */
 // Dibuka dari localhost → otomatis memakai emulator, tidak menyentuh project asli.
 const LOKAL = ['localhost', '127.0.0.1'].includes(location.hostname);
-const firebaseConfig = LOKAL && configAsli.apiKey.startsWith('ISI')
+const firebaseConfig = LOKAL
   ? { apiKey: 'demo-key', authDomain: 'demo-presensi.firebaseapp.com', projectId: 'demo-presensi', appId: 'demo' }
   : configAsli;
 const pakaiEmulator = a => { if (LOKAL) connectAuthEmulator(a, 'http://127.0.0.1:9099', { disableWarnings: true }); return a; };
 
 /* ---------- logo & ikon ---------- */
-// Logo sekolah: ganti file public/logo.png untuk memakai logo lain (PNG persegi, latar transparan).
-const LOGO_URL = 'logo.png';
+// Logo sekolah. Ganti logo.webp (tajam, untuk tampilan & cetak) dan logo-latar.webp (versi buram untuk latar kartu).
+const LOGO_URL = 'logo.webp';
+const LOGO_LATAR_URL = 'logo-latar.webp';
 // Semboyan sekolah, tampil di pita bawah kartu siswa.
 const MOTTO = 'Berakhlak • Berilmu • Berprestasi';
 const HAK_CIPTA = '© 2026 Dafid Indra Jaya Ningrat';
@@ -75,6 +76,7 @@ function pesanError(e) {
     'auth/weak-password': 'Kata sandi minimal 6 karakter.',
     'auth/too-many-requests': 'Terlalu banyak percobaan. Tunggu beberapa menit lalu coba lagi.',
     'auth/network-request-failed': 'Tidak ada koneksi internet.',
+    'auth/configuration-not-found': 'Login email/kata sandi belum diaktifkan untuk project ini. Aktifkan di Firebase Console → Authentication → Sign-in method → Email/Password.',
     'auth/operation-not-allowed': 'Login email/kata sandi belum diaktifkan di Firebase Console → Authentication → Sign-in method.',
     'permission-denied': 'Akses ditolak. Akun Anda tidak punya izin untuk tindakan ini.',
     'resource-exhausted': 'Kuota gratis harian Firebase habis. Aplikasi bisa dipakai lagi setelah kuota direset (sekitar pukul 14.00–15.00 WIB).',
@@ -418,7 +420,7 @@ let scanner = null, kunciScan = false, terakhir = { teks: '', waktu: 0 };
 function viewScan(m) {
   m.innerHTML = `<section class="scan">
     <div class="scan-kiri">
-      <div class="scan-kamera"><div id="reader"></div><p class="scan-kosong">${ikon('scan')}Kamera belum aktif</p></div>
+      <div class="scan-kamera"><div id="reader"></div><div class="bidik" aria-hidden="true"><span></span></div><p class="scan-kosong">${ikon('scan')}Kamera belum aktif</p></div>
       <button id="btnKamera" class="btn utama lebar">${ikon('kamera')}Mulai scan</button>
       <p class="muted kecil">Jam masuk ${esc(S.pengaturan.jamMasuk)}. Scan setelah jam ini dicatat Terlambat. Satu siswa hanya tercatat sekali per hari.</p>
     </div>
@@ -439,10 +441,15 @@ async function mulaiKamera() {
   if (!window.Html5Qrcode) { toast('Komponen scanner gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.', 'error'); return; }
   const btn = $('#btnKamera'); btn.disabled = true;
   try {
-    scanner = new Html5Qrcode('reader', { verbose: false });
+    // Seluruh gambar kamera dipindai (tanpa qrbox bawaan), jadi bingkai bidik buatan sendiri selalu tepat di tengah.
+    scanner = new Html5Qrcode('reader', {
+      verbose: false,
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    });
     await scanner.start(
       { facingMode: 'environment' },
-      { fps: 10, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.72); return { width: s, height: s }; } },
+      { fps: 12, aspectRatio: 1 },
       onScan, () => {}
     );
     $('.scan-kamera').classList.add('aktif');
@@ -1088,7 +1095,7 @@ function isiKartu() {
   if (!window.qrcode) { box.innerHTML = `<p>Komponen pembuat QR gagal dimuat. Periksa koneksi lalu muat ulang halaman.</p>`; return; }
   const list = S.siswa.filter(s => !S.kartuKelas || s.kelas === S.kartuKelas);
   if (!list.length) { box.innerHTML = `<div class="kosong-besar"><p>Belum ada siswa untuk dibuatkan kartu.</p></div>`; return; }
-  box.innerHTML = list.map(s => `<article class="kartu-qr" style="--logo:url('${LOGO_URL}')">
+  box.innerHTML = list.map(s => `<article class="kartu-qr" style="--logo:url('${LOGO_LATAR_URL}')">
     <div class="kq-siluet" aria-hidden="true"></div>
     <div class="kq-band"><img class="kq-logo" src="${LOGO_URL}" alt=""><div class="kq-band-teks">
       <p class="kq-sekolah">${esc(S.namaSekolah)}</p><p class="kq-jenis">Kartu Presensi Siswa</p></div></div>

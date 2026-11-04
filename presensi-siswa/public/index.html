@@ -174,8 +174,21 @@ main{
   display:grid;place-items:center;
 }
 .scan-kamera.aktif{border-style:solid;border-color:var(--biru);background:#000}
-.scan-kamera #reader{position:absolute;inset:0;width:100%;border:0!important}
-.scan-kamera #reader video{width:100%!important;height:100%!important;object-fit:cover}
+.scan-kamera #reader{position:absolute;inset:0;width:100%;height:100%;border:0!important}
+.scan-kamera #reader video{width:100%!important;height:100%!important;object-fit:cover;display:block}
+.scan-kamera #reader img{display:none}
+/* bingkai bidik: selalu di tengah kotak kamera */
+.bidik{position:absolute;left:50%;top:50%;width:70%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none;display:none;
+  --s:#fff;--p:12%;--t:4px;border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.28);
+  background:
+    linear-gradient(var(--s),var(--s)) top left/var(--p) var(--t),linear-gradient(var(--s),var(--s)) top left/var(--t) var(--p),
+    linear-gradient(var(--s),var(--s)) top right/var(--p) var(--t),linear-gradient(var(--s),var(--s)) top right/var(--t) var(--p),
+    linear-gradient(var(--s),var(--s)) bottom left/var(--p) var(--t),linear-gradient(var(--s),var(--s)) bottom left/var(--t) var(--p),
+    linear-gradient(var(--s),var(--s)) bottom right/var(--p) var(--t),linear-gradient(var(--s),var(--s)) bottom right/var(--t) var(--p);
+  background-repeat:no-repeat}
+.bidik span{position:absolute;left:6%;right:6%;top:50%;height:2px;background:var(--emas);box-shadow:0 0 8px var(--emas);animation:garis-scan 2.2s ease-in-out infinite alternate}
+@keyframes garis-scan{from{top:10%}to{top:90%}}
+.scan-kamera.aktif .bidik{display:block}
 .scan-kosong{color:var(--biru);font-weight:700;padding:1rem;text-align:center;display:grid;gap:.5rem;justify-items:center}
 .scan-kosong .ikon{width:56px;height:56px;stroke-width:1.6}
 .scan-kamera.aktif .scan-kosong{display:none}
@@ -267,17 +280,19 @@ main{
 /* gambar logo sekolah buram sebagai latar di belakang identitas dan QR */
 .kartu-qr>.kq-siluet{
   position:absolute;z-index:0;pointer-events:none;
-  background:var(--logo) center/contain no-repeat;opacity:.2;filter:blur(.35mm) saturate(1.1);
+  background:var(--logo) center/contain no-repeat;opacity:.22;
 }
 .kq-band{
-  grid-area:band;color:#fff;display:flex;align-items:center;gap:2mm;padding:0 3mm;min-width:0;
-  background:radial-gradient(circle at 100% 0,rgba(255,255,255,.13) 0 34%,transparent 34.5%),
-    radial-gradient(circle at 100% 100%,#F5B700 0 9%,transparent 9.5%),
-    radial-gradient(circle at 91% 112%,#2E9B45 0 7%,transparent 7.5%),
-    linear-gradient(135deg,#1A4BBF,#0E2C7A);
+  grid-area:band;color:#fff;display:flex;align-items:center;gap:2mm;padding:0 3mm;min-width:0;overflow:hidden;
+  background:linear-gradient(135deg,#1A4BBF,#0E2C7A);
   border-bottom:.7mm solid #F5B700;
 }
-.kq-logo{width:9mm;height:9mm;object-fit:contain;flex:none;filter:drop-shadow(0 .3mm .6mm rgba(0,0,0,.35))}
+/* hiasan bulat pakai elemen vektor (bukan gradien radial) supaya tetap tajam saat dicetak */
+.kq-band::before,.kq-band::after{content:"";position:absolute;border-radius:50%;pointer-events:none}
+.kq-band::before{width:9mm;height:9mm;right:-3mm;bottom:-4.5mm;background:#F5B700;box-shadow:-4.2mm 2mm 0 -1.6mm #2E9B45}
+.kq-band::after{width:24mm;height:24mm;right:-9mm;top:-13mm;background:rgba(255,255,255,.12)}
+.kq-band>*{position:relative;z-index:1}
+.kq-logo{width:9mm;height:9mm;object-fit:contain;flex:none}
 .kq-band-teks{min-width:0;display:grid}
 .kq-sekolah{font-size:7.5pt;font-weight:800;line-height:1.15;overflow-wrap:anywhere}
 .kq-jenis{font-size:5.5pt;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#FFD34D;margin-top:.4mm}
