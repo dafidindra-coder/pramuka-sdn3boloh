@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function setupPath() { return /databases/$(database)/documents/config/setup; }
+    // Guru atau kepala sekolah yang akunnya aktif
+    function isStaff() {
+      return signedIn() && exists(userPath(request.auth.uid))
+        && get(userPath(request.auth.uid)).data.aktif == true;
+    }
+    function isKepala() { return isStaff() && get(userPath(request.auth.uid)).data.role == 'kepala'; }
+
+    // Penanda bahwa kepala sekolah pertama sudah dibuat (hanya bisa sekali)
+    match /config/setup {
+      allow read: if true;
+      allow create: if signedIn() && !exists(setupPath())
+        && getAfter(userPath(request.auth.uid)).data.role == 'kepala';
+      allow update: if isKepala();
+    }
+    match /config/pengaturan {
+      allow read: if isStaff();
+      allow write: if isKepala();
+    }
+
+    // Akun: kepala pertama dibuat saat setup, guru hanya bisa ditambah kepala sekolah
+    match /users/{uid} {
+      allow read: if isKepala() || (signedIn() && request.auth.uid == uid);
+      allow create: if (signedIn() && request.auth.uid == uid
+                        && !exists(setupPath()) && existsAfter(setupPath())
+                        && request.resource.data.role == 'kepala'
+                        && request.resource.data.aktif == true)
+                    || (isKepala() && request.resource.data.role == 'guru');
+      allow update: if isKepala() && resource.data.role == 'guru' && request.resource.data.role == 'guru';
+      allow delete: if isKepala() && resource.data.role == 'guru';
+    }
+
+    match /siswa/{nis} {
+      allow read, delete: if isStaff();
+      allow create, update: if isStaff()
+        && request.resource.data.nis == nis
+        && request.resource.data.nama is string && request.resource.data.nama.size() > 0
+        && request.resource.data.kelas is string && request.resource.data.kelas.size() > 0
+        && request.resource.data.token is string && request.resource.data.token.size() >= 6;
+    }
+    // Foto siswa: JPEG kecil dalam bentuk teks (maks. ±200 KB per foto)
+    match /foto/{nis} {
+      allow read, delete: if isStaff();
+      allow create, update: if isStaff()
+        && request.resource.data.nis == nis
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 200000
+        && request.resource.data.data.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+');
+    }
+    match /meta/{id} {
+      allow read, write: if isStaff();
+    }
+    match /absensi/{id} {
+      allow read, delete: if isStaff();
+      allow create, update: if isStaff() && request.resource.data.status in ['H', 'T', 'I', 'S'];
+    }
+    match /rekap/{id} {
+      allow read, write: if isStaff();
+    }
+    match /hari/{tgl} {
+      allow read, create, update: if isStaff();
+      allow delete: if isKepala();
+    }
+  }
+}
