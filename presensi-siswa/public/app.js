@@ -571,8 +571,8 @@ function viewHarian(m) {
   $('#hKelas').onchange = e => { S.harianKelas = e.target.value; renderDaftarHarian(); };
   $('#hCari').oninput = () => renderDaftarHarian();
   $('#hMuat').onclick = () => muat(true);
-  $('#hUnduh').onclick = unduhHarian;
-  $('#hCetak').onclick = cetakHarian;
+  $('#hUnduh').onclick = e => sambilTunggu(e.currentTarget, unduhHarian);
+  $('#hCetak').onclick = e => sambilTunggu(e.currentTarget, cetakHarian);
   $('#hDaftar').onclick = async e => {
     const b = e.target.closest('button[data-st]'); if (!b) return;
     const li = b.closest('li[data-nis]'); const s = S.siswaMap.get(li.dataset.nis);
@@ -625,17 +625,57 @@ function renderDaftarHarian() {
     }).join('');
 }
 
+// Persen dengan maksimal 2 angka desimal, format Indonesia (contoh 4,55%).
+const fmtPersen = x => x === null || !isFinite(x) ? '-' : x.toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '%';
+// Persentase ketidakhadiran = jumlah ketidakhadiran (I + S + A) ÷ (jumlah siswa × hari efektif) × 100%.
+// Untuk satu anak, jumlah siswa = 1.
+const persenTidakHadir = (tidakHadir, jumlahSiswa, hariEfektif) =>
+  jumlahSiswa && hariEfektif ? tidakHadir / (jumlahSiswa * hariEfektif) * 100 : null;
+
+// Rekap bulan berjalan dari tanggal 1 sampai tanggal laporan harian (untuk % ketidakhadiran per anak).
+// Memakai dokumen rekap bulanan, dikurangi catatan sesudah tanggal laporan bila ada.
+async function rekapSampai(tgl) {
+  const bln = tgl.slice(0, 7);
+  const lap = await muatLaporan(bln);
+  const hari = lap.hari.filter(t => t <= tgl);
+  if (!hari.includes(tgl) && S.cacheHarian[tgl]?.size) hari.push(tgl);
+  const kurang = new Map();
+  if (lap.hari.some(t => t > tgl)) {
+    const snap = await getDocs(query(collection(db, 'absensi'), where('tanggal', '>', tgl), where('tanggal', '<=', bln + '-31')));
+    snap.forEach(d => { const a = d.data(); const m = kurang.get(a.nis) || {}; m[a.status] = (m[a.status] || 0) + 1; kurang.set(a.nis, m); });
+  }
+  const he = hari.length;
+  return {
+    he, dari: bln + '-01',
+    hitung(s) {
+      const r = lap.rekap.get(s.nis) || {}, k = kurang.get(s.nis) || {};
+      const v = x => Math.max(0, (r[x] || 0) - (k[x] || 0));
+      const H = v('H'), T = v('T'), I = v('I'), Sk = v('S');
+      const A = Math.max(0, he - (H + T + I + Sk));
+      return { H, T, I, S: Sk, A, tidak: I + Sk + A, persen: persenTidakHadir(I + Sk + A, 1, he) };
+    }
+  };
+}
+// Menjalankan tugas laporan sambil menonaktifkan tombolnya (ikon tombol tetap utuh).
+async function sambilTunggu(btn, fn) {
+  const asli = btn.innerHTML; btn.disabled = true; btn.lastChild.textContent = 'Menyiapkan…';
+  try { await fn(); } catch (e) { toast(pesanError(e), 'error'); } finally { btn.disabled = false; btn.innerHTML = asli; }
+}
+
 // Laporan satu hari: daftar per siswa lalu ringkasan per kelas, untuk dibuka di Excel.
-function unduhHarian() {
+async function unduhHarian() {
   const data = S.cacheHarian[S.harianTgl];
   if (!data) return toast('Data hari ini belum selesai dimuat.', 'error');
   const kls = S.harianKelas;
   const list = S.siswa.filter(s => !kls || s.kelas === kls);
   if (!list.length) return toast('Belum ada data siswa.', 'error');
   const kosong = S.harianTgl === tglHariIni() ? 'Belum tercatat' : 'Alpa';
+  const bulanIni = await rekapSampai(S.harianTgl);
+  const rentang = `${fmtTanggal(bulanIni.dari).replace(/^[^,]+,\s*/, '')} s.d. ${fmtTanggal(S.harianTgl).replace(/^[^,]+,\s*/, '')}`;
   const rows = [
     [S.namaSekolah], ['Laporan presensi harian', fmtTanggal(S.harianTgl)], [kls ? 'Kelas ' + kls : 'Semua kelas'], [],
-    ['No', 'Kelas', 'NIS', 'Nama', 'Status', 'Jam', 'Cara', 'Dicatat oleh']
+    ['No', 'Kelas', 'NIS', 'Nama', 'Status', 'Jam', 'Cara', 'Dicatat oleh',
+      `Tidak hadir ${rentang} (hari)`, `Hari efektif`, '% Ketidakhadiran']
   ];
   const grup = {};
   list.forEach(s => (grup[s.kelas] ||= []).push(s));
@@ -643,19 +683,22 @@ function unduhHarian() {
   let no = 0;
   kelasUrut.forEach(k => grup[k].forEach(s => {
     const a = data.get(s.nis);
+    const b = bulanIni.hitung(s);
     rows.push([++no, s.kelas, s.nis, s.nama, a ? STATUS[a.status] : kosong, a?.jam || '',
-      a ? (a.cara === 'scan' ? 'Scan kartu' : 'Manual') : '', a?.oleh || '']);
+      a ? (a.cara === 'scan' ? 'Scan kartu' : 'Manual') : '', a?.oleh || '', b.tidak, bulanIni.he, fmtPersen(b.persen)]);
   }));
-  rows.push([], ['Ringkasan per kelas'], ['Kelas', 'Jumlah siswa', 'Hadir', 'Terlambat', 'Izin', 'Sakit', kosong, 'Persen kehadiran']);
+  rows.push([], ['% Ketidakhadiran per anak = (Izin + Sakit + Alpa) ÷ hari efektif × 100%, dihitung ' + rentang + '.']);
+  rows.push([], ['Ringkasan per kelas hari ini'], ['Kelas', 'Jumlah siswa', 'Hadir', 'Terlambat', 'Izin', 'Sakit', kosong, 'Persen kehadiran', '% Ketidakhadiran klasikal']);
   const tot = { n: 0, H: 0, T: 0, I: 0, S: 0, B: 0 };
   kelasUrut.forEach(k => {
     const n = { H: 0, T: 0, I: 0, S: 0, B: 0 };
     grup[k].forEach(s => n[data.get(s.nis)?.status || 'B']++);
     const jml = grup[k].length;
     Object.keys(n).forEach(x => tot[x] += n[x]); tot.n += jml;
-    rows.push([k, jml, n.H, n.T, n.I, n.S, n.B, Math.round((n.H + n.T) / jml * 100)]);
+    rows.push([k, jml, n.H, n.T, n.I, n.S, n.B, Math.round((n.H + n.T) / jml * 100), fmtPersen(persenTidakHadir(n.I + n.S + n.B, jml, 1))]);
   });
-  if (kelasUrut.length > 1) rows.push(['Jumlah', tot.n, tot.H, tot.T, tot.I, tot.S, tot.B, Math.round((tot.H + tot.T) / tot.n * 100)]);
+  if (kelasUrut.length > 1) rows.push(['Jumlah', tot.n, tot.H, tot.T, tot.I, tot.S, tot.B, Math.round((tot.H + tot.T) / tot.n * 100), fmtPersen(persenTidakHadir(tot.I + tot.S + tot.B, tot.n, 1))]);
+  rows.push(['% Ketidakhadiran klasikal = (Izin + Sakit + ' + kosong + ') ÷ (jumlah siswa × 1 hari) × 100%.']);
   unduhCSV(`presensi-harian-${S.harianTgl}${kls ? '-kelas-' + kls : ''}.csv`, rows);
 }
 
@@ -674,7 +717,7 @@ function ttdCetak(tgl) {
 }
 
 // Laporan harian siap cetak: halaman rekap semua kelas, lalu satu halaman per kelas.
-function cetakHarian() {
+async function cetakHarian() {
   const data = S.cacheHarian[S.harianTgl];
   if (!data) return toast('Data tanggal ini belum selesai dimuat.', 'error');
   const kls = S.harianKelas;
@@ -686,18 +729,22 @@ function cetakHarian() {
   const kelasUrut = Object.keys(grup).sort(urutTeks);
   const hitung = ss => { const n = { H: 0, T: 0, I: 0, S: 0, X: 0 }; ss.forEach(s => n[data.get(s.nis)?.status || 'X']++); return n; };
   const persen = (n, j) => j ? Math.round((n.H + n.T) / j * 100) + '%' : '-';
+  const tidakKls = (n, j) => fmtPersen(persenTidakHadir(n.I + n.S + n.X, j, 1));
   const tgl = fmtTanggal(S.harianTgl);
+  const bulanIni = await rekapSampai(S.harianTgl);
+  const rentang = `${fmtTanggal(bulanIni.dari).replace(/^[^,]+,\s*/, '')} s.d. ${fmtTanggal(S.harianTgl).replace(/^[^,]+,\s*/, '')}`;
   let html = '';
   if (kelasUrut.length > 1) {
     const tot = { H: 0, T: 0, I: 0, S: 0, X: 0 }; let jml = 0;
     const baris = kelasUrut.map((k, i) => {
       const n = hitung(grup[k]); Object.keys(n).forEach(x => tot[x] += n[x]); jml += grup[k].length;
-      return `<tr><td class="n">${i + 1}</td><td>Kelas ${esc(k)}</td><td class="n">${grup[k].length}</td><td class="n">${n.H}</td><td class="n">${n.T}</td><td class="n">${n.I}</td><td class="n">${n.S}</td><td class="n">${n.X}</td><td class="n">${persen(n, grup[k].length)}</td></tr>`;
+      return `<tr><td class="n">${i + 1}</td><td>Kelas ${esc(k)}</td><td class="n">${grup[k].length}</td><td class="n">${n.H}</td><td class="n">${n.T}</td><td class="n">${n.I}</td><td class="n">${n.S}</td><td class="n">${n.X}</td><td class="n">${persen(n, grup[k].length)}</td><td class="n">${tidakKls(n, grup[k].length)}</td></tr>`;
     }).join('');
     html += `<section class="lembar">${kopCetak('REKAP PRESENSI HARIAN', `${tgl} · semua kelas`)}
-      <table class="tabel-cetak"><thead><tr><th class="n">No</th><th>Kelas</th><th class="n">Siswa</th><th class="n">H</th><th class="n">T</th><th class="n">I</th><th class="n">S</th><th class="n">${kodeKosong}</th><th class="n">Hadir</th></tr></thead>
-      <tbody>${baris}</tbody><tfoot><tr><th></th><th>Jumlah</th><th class="n">${jml}</th><th class="n">${tot.H}</th><th class="n">${tot.T}</th><th class="n">${tot.I}</th><th class="n">${tot.S}</th><th class="n">${tot.X}</th><th class="n">${persen(tot, jml)}</th></tr></tfoot></table>
-      <p class="ringkas-cetak">H Hadir, T Terlambat, I Izin, S Sakit, ${kodeKosong} ${labelKosong}. Persen hadir = (H + T) dibagi jumlah siswa.</p>
+      <table class="tabel-cetak"><thead><tr><th class="n">No</th><th>Kelas</th><th class="n">Siswa</th><th class="n">H</th><th class="n">T</th><th class="n">I</th><th class="n">S</th><th class="n">${kodeKosong}</th><th class="n">Hadir</th><th class="n">Tidak hadir</th></tr></thead>
+      <tbody>${baris}</tbody><tfoot><tr><th></th><th>Jumlah</th><th class="n">${jml}</th><th class="n">${tot.H}</th><th class="n">${tot.T}</th><th class="n">${tot.I}</th><th class="n">${tot.S}</th><th class="n">${tot.X}</th><th class="n">${persen(tot, jml)}</th><th class="n">${tidakKls(tot, jml)}</th></tr></tfoot></table>
+      <p class="ringkas-cetak">H Hadir, T Terlambat, I Izin, S Sakit, ${kodeKosong} ${labelKosong}. Persen hadir = (H + T) ÷ jumlah siswa × 100%.
+        Ketidakhadiran klasikal = (I + S + ${kodeKosong}) ÷ (jumlah siswa × 1 hari efektif) × 100%.</p>
       ${ttdCetak(S.harianTgl)}${kakiCetak()}</section>`;
   }
   html += kelasUrut.map(k => {
@@ -706,12 +753,17 @@ function cetakHarian() {
       const a = data.get(s.nis);
       const st = a ? a.status : kodeKosong;
       const ket = a ? (a.cara === 'scan' ? 'Scan kartu' : `Dicatat ${a.oleh || 'guru'}`) : '';
+      const b = bulanIni.hitung(s);
       return `<tr><td class="n">${i + 1}</td><td>${esc(s.nis)}</td><td>${esc(s.nama)}</td>
-        <td class="stc st-${st}">${a ? STATUS[a.status] : labelKosong}</td><td>${a && ['H', 'T'].includes(a.status) ? esc(a.jam) : ''}</td><td>${esc(ket)}</td></tr>`;
+        <td class="stc st-${st}">${a ? STATUS[a.status] : labelKosong}</td><td>${a && ['H', 'T'].includes(a.status) ? esc(a.jam) : ''}</td><td>${esc(ket)}</td>
+        <td class="n">${b.tidak}/${bulanIni.he}</td><td class="n">${fmtPersen(b.persen)}</td></tr>`;
     }).join('');
     return `<section class="lembar">${kopCetak('LAPORAN PRESENSI HARIAN', `${tgl} · Kelas ${k}`)}
-      <table class="tabel-cetak"><thead><tr><th class="n">No</th><th>NIS</th><th>Nama siswa</th><th>Status</th><th>Jam</th><th>Keterangan</th></tr></thead><tbody>${baris}</tbody></table>
-      <p class="ringkas-cetak"><b>Jumlah ${ss.length} siswa:</b> Hadir ${n.H}, Terlambat ${n.T}, Izin ${n.I}, Sakit ${n.S}, ${labelKosong} ${n.X}. Kehadiran ${persen(n, ss.length)}.</p>
+      <table class="tabel-cetak"><thead><tr><th class="n">No</th><th>NIS</th><th>Nama siswa</th><th>Status</th><th>Jam</th><th>Keterangan</th>
+        <th class="n">Tidak hadir*</th><th class="n">% Tidak hadir*</th></tr></thead><tbody>${baris}</tbody></table>
+      <p class="ringkas-cetak"><b>Jumlah ${ss.length} siswa:</b> Hadir ${n.H}, Terlambat ${n.T}, Izin ${n.I}, Sakit ${n.S}, ${labelKosong} ${n.X}.
+        Kehadiran ${persen(n, ss.length)}, ketidakhadiran klasikal hari ini ${tidakKls(n, ss.length)}.</p>
+      <p class="ringkas-cetak">*Dihitung ${rentang} (${bulanIni.he} hari efektif): jumlah hari tidak hadir (Izin + Sakit + Alpa) ÷ hari efektif × 100%.</p>
       ${ttdCetak(S.harianTgl)}${kakiCetak()}</section>`;
   }).join('');
   $('#hCetakIsi').innerHTML = html;
@@ -736,7 +788,7 @@ function hitungBaris(s, lap) {
   const he = lap.hari.length;
   const A = Math.max(0, he - (H + T + I + Sk));
   const persen = he ? Math.round((H + T) / he * 100) : null;
-  return { H, T, I, S: Sk, A, persen };
+  return { H, T, I, S: Sk, A, persen, tidak: I + Sk + A, persenTidak: persenTidakHadir(I + Sk + A, 1, he) };
 }
 
 function viewLaporan(m) {
@@ -767,12 +819,21 @@ function viewLaporan(m) {
   $('#lCetak').onclick = () => cetak('laporan');
   $('#lCsv').onclick = () => {
     const lap = S.cacheLap[S.lapBulan]; if (!lap) return;
-    const rows = [['Kelas', 'NIS', 'Nama', 'Hadir', 'Terlambat', 'Izin', 'Sakit', 'Alpa', 'Persen kehadiran']];
+    const he = lap.hari.length;
+    const rows = [['Kelas', 'NIS', 'Nama', 'Hadir', 'Terlambat', 'Izin', 'Sakit', 'Alpa', 'Persen kehadiran', 'Jumlah tidak hadir', '% Ketidakhadiran']];
+    const perKelas = {};
     S.siswa.filter(s => !S.lapKelas || s.kelas === S.lapKelas).forEach(s => {
       const b = hitungBaris(s, lap);
-      rows.push([s.kelas, s.nis, s.nama, b.H, b.T, b.I, b.S, b.A, b.persen ?? '']);
+      const k = perKelas[s.kelas] ||= { n: 0, tidak: 0 }; k.n++; k.tidak += b.tidak;
+      rows.push([s.kelas, s.nis, s.nama, b.H, b.T, b.I, b.S, b.A, b.persen ?? '', b.tidak, fmtPersen(b.persenTidak)]);
     });
-    rows.push([], ['Hari efektif', lap.hari.length]);
+    rows.push([], ['Hari efektif', he], [],
+      ['Ketidakhadiran klasikal per kelas'], ['Kelas', 'Jumlah siswa', 'Hari efektif', 'Jumlah tidak hadir (I + S + A)', '% Ketidakhadiran klasikal']);
+    Object.keys(perKelas).sort(urutTeks).forEach(k => {
+      const x = perKelas[k];
+      rows.push([k, x.n, he, x.tidak, fmtPersen(persenTidakHadir(x.tidak, x.n, he))]);
+    });
+    rows.push(['% Ketidakhadiran klasikal = jumlah tidak hadir ÷ (jumlah siswa × hari efektif) × 100%.']);
     unduhCSV(`rekap-presensi-${S.lapBulan}${S.lapKelas ? '-kelas-' + S.lapKelas : ''}.csv`, rows);
   };
   $('#lIsi').onclick = async e => {
@@ -803,21 +864,23 @@ function renderLaporan() {
       ['H', 'T', 'I', 'S', 'A'].forEach(x => tot[x] += b[x]);
       return `<tr><td class="n">${i + 1}</td><td class="angka">${esc(s.nis)}</td><td>${esc(s.nama)}</td>
         ${['H', 'T', 'I', 'S', 'A'].map(x => `<td class="n">${b[x]}</td>`).join('')}
-        <td class="n">${b.persen === null ? '-' : b.persen + '%'}</td></tr>`;
+        <td class="n">${b.persen === null ? '-' : b.persen + '%'}</td><td class="n persen-tidak">${fmtPersen(b.persenTidak)}</td></tr>`;
     }).join('');
     const maks = grup[k].length * he;
     const rata = maks ? Math.round((tot.H + tot.T) / maks * 100) + '%' : '-';
+    const tidakKlasikal = fmtPersen(persenTidakHadir(tot.I + tot.S + tot.A, grup[k].length, he));
     return `<section class="grup">
-      <div class="grup-judul"><h3>Kelas ${esc(k)}</h3><span class="muted kecil">${grup[k].length} siswa, kehadiran ${rata}</span></div>
+      <div class="grup-judul"><h3>Kelas ${esc(k)}</h3><span class="muted kecil">${grup[k].length} siswa, kehadiran ${rata}, ketidakhadiran klasikal <b class="persen-tidak">${tidakKlasikal}</b></span></div>
       <div class="gulir"><table class="tabel">
         <thead><tr><th class="n">No</th><th>NIS</th><th>Nama</th>
-          ${['H', 'T', 'I', 'S', 'A'].map(x => `<th class="n st-${x}" title="${STATUS[x]}">${x}</th>`).join('')}<th class="n">Hadir</th></tr></thead>
+          ${['H', 'T', 'I', 'S', 'A'].map(x => `<th class="n st-${x}" title="${STATUS[x]}">${x}</th>`).join('')}<th class="n">Hadir</th><th class="n" title="Ketidakhadiran">Tdk hadir</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr><td></td><td></td><td>Jumlah</td>${['H', 'T', 'I', 'S', 'A'].map(x => `<td class="n">${tot[x]}</td>`).join('')}<td class="n">${rata}</td></tr></tfoot>
+        <tfoot><tr><td></td><td></td><td>Jumlah</td>${['H', 'T', 'I', 'S', 'A'].map(x => `<td class="n">${tot[x]}</td>`).join('')}<td class="n">${rata}</td><td class="n persen-tidak">${tidakKlasikal}</td></tr>
+          <tr class="baris-rumus"><td></td><td></td><td colspan="8">Ketidakhadiran klasikal = (I + S + A) ÷ (jumlah siswa × hari efektif) × 100% = ${tot.I + tot.S + tot.A} ÷ (${grup[k].length} × ${he}) × 100% = <b>${tidakKlasikal}</b></td></tr></tfoot>
       </table></div></section>`;
   }).join('');
   $('#lIsi').innerHTML = kepalaCetak + info + tabel +
-    `<p class="muted kecil keterangan">H Hadir tepat waktu, T Terlambat, I Izin, S Sakit, A Alpa. Alpa dihitung dari hari efektif yang tidak memiliki catatan. Siswa yang baru ditambahkan di tengah bulan ikut dihitung Alpa untuk hari sebelum ia terdaftar, jadi periksa kembali sebelum laporan dicetak. Persen hadir = (H + T) dibagi hari efektif.</p>` +
+    `<p class="muted kecil keterangan">H Hadir tepat waktu, T Terlambat, I Izin, S Sakit, A Alpa. Alpa dihitung dari hari efektif yang tidak memiliki catatan. Siswa yang baru ditambahkan di tengah bulan ikut dihitung Alpa untuk hari sebelum ia terdaftar, jadi periksa kembali sebelum laporan dicetak. Persen hadir = (H + T) ÷ hari efektif × 100%. Ketidakhadiran per anak = (I + S + A) ÷ hari efektif × 100%. Ketidakhadiran klasikal = jumlah (I + S + A) satu kelas ÷ (jumlah siswa × hari efektif) × 100%.</p>` +
     `<div class="hanya-cetak">${ttdCetak(tglHariIni())}${kakiCetak()}</div>`;
 }
 
