@@ -26,3 +26,7 @@ Ubah `config.js`: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `DOMAIN_EMAIL`, dan `IURA
 ## Memperbarui aplikasi
 Setiap kali mengubah file `.js` atau `.css`, naikkan angka `?v=` di semua file `.html`
 (mis. `?v=20261020` menjadi tanggal hari ini) agar browser pengguna mengambil versi baru, bukan salinan lama dari cache.
+
+## Aplikasi presensi siswa
+Aplikasi presensi siswa berbasis kartu QR (Firebase) sudah dipindah ke repo tersendiri:
+https://github.com/dafidindra-coder/presensi-sdn3boloh
