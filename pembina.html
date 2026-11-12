@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Pembina — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261022">
+<link rel="stylesheet" href="style.css?v=20261112">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -17,27 +17,36 @@
 <dialog id="dlg" aria-labelledby="dlg-judul">
   <form id="form" method="dialog">
     <h2 id="dlg-judul">Tambah pembina</h2>
+    <div class="foto-baris"><span id="f-foto"></span><div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn kedua kecil" type="button" id="f-pilih-foto">Pilih foto</button><button class="btn kedua kecil" type="button" id="f-hapus-foto">Hapus foto</button></div></div>
     <label for="f-nip">NIP</label><input id="f-nip" inputmode="numeric" required pattern="[0-9]+" title="Hanya angka" maxlength="20">
+    <p class="muted" id="f-nip-info" style="margin-top:4px" hidden>Mengubah NIP juga mengubah nomor untuk login.</p>
     <label for="f-nama">Nama lengkap</label><input id="f-nama" required maxlength="80">
     <div class="baris-form">
       <div><label for="f-gudep">Gudep</label><select id="f-gudep"><option value="05.093">05.093 Putra</option><option value="05.122">05.122 Putri</option></select></div>
       <div><label for="f-hp">No. HP</label><input id="f-hp" type="tel" inputmode="tel" maxlength="16" placeholder="08…"></div>
     </div>
-    <div id="baris-sandi"><label for="f-sandi">Kata sandi awal</label><input id="f-sandi" minlength="6" autocomplete="new-password" placeholder="minimal 6 karakter">
-      <p class="muted" style="margin-top:4px">Pembina masuk dengan NIP dan kata sandi ini.</p></div>
+    <div id="baris-sandi"><label for="f-sandi" id="f-sandi-label">Kata sandi awal</label><input id="f-sandi" minlength="6" autocomplete="new-password" placeholder="minimal 6 karakter">
+      <p class="muted" style="margin-top:4px" id="f-sandi-info">Pembina masuk dengan NIP dan kata sandi ini.</p></div>
     <label class="cek" id="baris-aktif" style="border:0;padding:8px 0"><input type="checkbox" id="f-aktif"> <span>Masih aktif (hapus centang bila sudah tidak membina; akun tidak bisa masuk lagi)</span></label>
     <div id="f-pesan" class="err" hidden></div>
     <div class="tombol-dialog"><button class="btn kedua" type="button" id="batal">Batal</button><button class="btn" id="simpan">Simpan</button></div>
+    <details class="zona-bahaya" id="zona-hapus">
+      <summary>Hapus akun pembina ini</summary>
+      <p>Akun login pembina ini akan dihapus permanen. Data siswa, absensi, dan kas Gudep <b>tidak</b> ikut terhapus. Bila pembina hanya berhenti sementara, lebih baik hapus centang "Masih aktif".</p>
+      <label for="f-konfirmasi">Ketik <b>HAPUS</b> untuk mengonfirmasi</label><input id="f-konfirmasi" autocomplete="off">
+      <button class="btn bahaya" type="button" id="f-hapus" disabled>Hapus akun permanen</button>
+    </details>
   </form>
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261022"></script>
+<script src="config.js?v=20261112"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['mabigus']); if(!p) return;
   const $=id=>document.getElementById(id), box=$('daftar'), dlg=$('dlg');
-  let pembina=[], jumlahSiswa={}, edit=null;
+  let pembina=[], jumlahSiswa={}, edit=null, fotoBaru;   // fotoBaru: undefined = tidak diubah, null = dihapus
 
   async function muat(){
     const [pb,sw]=await Promise.all([
@@ -52,8 +61,8 @@
     const aktif=pembina.filter(x=>x.aktif!==false).length;
     $('jumlah').textContent=`${aktif} pembina aktif${pembina.length>aktif?` · ${pembina.length-aktif} nonaktif`:''}`;
     box.innerHTML=pembina.length?Object.keys(GUDEP).map(g=>{const list=pembina.filter(x=>x.gudep===g);return `<section><h2 style="margin:6px 0 8px">${esc(namaGudep(g))} <span class="muted" style="font-weight:400">· ${jumlahSiswa[g]||0} siswa</span></h2>
-      <div style="display:flex;flex-direction:column;gap:10px">${list.length?list.map(x=>`<div class="card ${x.aktif===false?'redup':''}"><div class="siswa-kepala"><div><b>${esc(x.nama)}</b>
-        <div class="muted">NIP ${esc(x.nis_nip)}</div></div><button class="btn kedua kecil" data-edit="${esc(x.id)}" type="button">Ubah</button></div>
+      <div style="display:flex;flex-direction:column;gap:10px">${list.length?list.map(x=>`<div class="card ${x.aktif===false?'redup':''}"><div class="siswa-kepala"><div class="dengan-foto">${avatar(x,44)}<div><b>${esc(x.nama)}</b>
+        <div class="muted">NIP ${esc(x.nis_nip)}</div></div></div><button class="btn kedua kecil" data-edit="${esc(x.id)}" type="button">Ubah</button></div>
         <div class="muted" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">${x.aktif===false?'<span class="pil merah">Nonaktif</span>':'<span class="pil hijau">Aktif</span>'}
           <span>HP: ${x.no_hp?`<b style="user-select:all">${esc(x.no_hp)}</b>`:'—'}</span></div></div>`).join('')
         :'<div class="kosong"><b>Belum ada pembina</b><span>Tambahkan pembina untuk Gudep ini.</span></div>'}</div></section>`}).join('')
@@ -62,12 +71,29 @@
   function buka(x){
     edit=x||null;
     $('dlg-judul').textContent=x?'Ubah data pembina':'Tambah pembina';
-    $('f-nip').value=x?.nis_nip||''; $('f-nip').disabled=!!x;
+    $('f-nip').value=x?.nis_nip||''; $('f-nip-info').hidden=!x;
+    fotoBaru=undefined; tampilFoto();
+    $('f-sandi-label').textContent=x?'Kata sandi baru (opsional)':'Kata sandi awal';
+    $('f-sandi-info').textContent=x?'Kosongkan bila tidak ingin mengubah kata sandi pembina.':'Pembina masuk dengan NIP dan kata sandi ini.';
+    $('zona-hapus').hidden=!x; $('zona-hapus').open=false; $('f-konfirmasi').value=''; $('f-hapus').disabled=true;
     $('f-nama').value=x?.nama||''; $('f-gudep').value=x?.gudep||'05.093'; $('f-hp').value=x?.no_hp||'';
     $('f-aktif').checked=x?x.aktif!==false:true; $('baris-aktif').hidden=!x;
-    $('baris-sandi').hidden=!!x; $('f-sandi').required=!x; $('f-sandi').value='';
+    $('f-sandi').required=!x; $('f-sandi').value='';
     $('f-pesan').hidden=true; dlg.showModal(); $(x?'f-nama':'f-nip').focus();
   }
+  function tampilFoto(){
+    const f=fotoBaru===undefined?edit?.foto:fotoBaru;
+    $('f-foto').innerHTML=avatar({nama:$('f-nama').value||edit?.nama,foto:f},72); $('f-hapus-foto').hidden=!f;
+  }
+  $('f-pilih-foto').onclick=async()=>{try{const f=await pilihFoto();if(f){fotoBaru=f;tampilFoto()}}catch(e){toast(e.message)}};
+  $('f-hapus-foto').onclick=()=>{fotoBaru=null;tampilFoto()};
+  $('f-konfirmasi').oninput=()=>{$('f-hapus').disabled=$('f-konfirmasi').value.trim().toUpperCase()!=='HAPUS'};
+  $('f-hapus').onclick=async()=>{
+    const b=$('f-hapus'), pesan=$('f-pesan'); b.disabled=true; b.textContent='Menghapus…'; pesan.hidden=true;
+    try{await kelolaAkun({aksi:'hapus',id:edit.id}); dlg.close(); toast(`Akun ${edit.nama} dihapus`); muat()}
+    catch(err){pesan.textContent='Gagal menghapus: '+err.message;pesan.hidden=false;b.disabled=false}
+    finally{b.textContent='Hapus akun permanen'}
+  };
   $('tambah').onclick=()=>buka(); $('batal').onclick=()=>dlg.close();
   box.addEventListener('click',e=>{const b=e.target.closest('[data-edit]');if(b)buka(pembina.find(x=>x.id===b.dataset.edit))});
   $('form').addEventListener('submit',async e=>{
@@ -75,10 +101,17 @@
     const tombol=$('simpan'), pesan=$('f-pesan'); tombol.disabled=true; tombol.textContent='Menyimpan…'; pesan.hidden=true;
     const data={nama:$('f-nama').value.trim(),gudep:$('f-gudep').value,no_hp:$('f-hp').value.trim()||null};
     try{
+      const nip=$('f-nip').value.trim(), sandi=$('f-sandi').value;
+      if(fotoBaru!==undefined) data.foto=fotoBaru;
       if(edit){
         const {error}=await db.from('profil_pengguna').update({...data,aktif:$('f-aktif').checked}).eq('id',edit.id);
         if(error) throw error;
-      } else await buatAkun({...data,role:'pembina',nis:$('f-nip').value.trim(),kata_sandi:$('f-sandi').value});
+        if(nip!==String(edit.nis_nip)) await kelolaAkun({aksi:'ubah_nomor',id:edit.id,nis:nip});
+        if(sandi) await kelolaAkun({aksi:'ubah_sandi',id:edit.id,kata_sandi:sandi});
+      } else {
+        const {id}=await buatAkun({...data,role:'pembina',nis:nip,kata_sandi:sandi});
+        if(data.foto&&id) await db.from('profil_pengguna').update({foto:data.foto}).eq('id',id);
+      }
       dlg.close(); toast(edit?'Data pembina diperbarui':'Pembina ditambahkan'); muat();
     }catch(err){pesan.textContent='Gagal menyimpan: '+err.message;pesan.hidden=false}
     finally{tombol.disabled=false;tombol.textContent='Simpan'}

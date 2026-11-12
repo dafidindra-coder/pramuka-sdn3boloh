@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Impor Siswa — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css?v=20261112">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <nav id="subnav"></nav>
+  <div><div class="label" id="sub"></div><h1>Impor siswa</h1>
+    <p class="muted">Masukkan banyak siswa sekaligus dari Excel, Google Sheets, atau file CSV. Setiap siswa langsung mendapat akun login (NIS + kata sandi).</p></div>
+
+  <section class="card">
+    <h2>1. Siapkan data</h2>
+    <p class="muted" style="margin-top:4px">Urutan kolom: <b>NIS</b>, <b>Nama</b>, Kelas, Tingkat, Barung/Regu, HP orang tua, Kata sandi. Hanya NIS dan Nama yang wajib. Baris judul boleh ada atau tidak.</p>
+    <ul class="muted" style="margin:8px 0 0 18px;font-size:.84rem">
+      <li>Tingkat: <code>Mula</code>, <code>Bantu</code>, <code>Tata</code>, atau <code>Ramu</code> (boleh ditulis "Siaga Mula", "Penggalang Ramu").</li>
+      <li>Kata sandi kosong akan memakai kata sandi awal di langkah 3.</li>
+    </ul>
+    <button class="btn kedua kecil" id="unduh-contoh" type="button" style="margin-top:10px">Unduh contoh format (CSV)</button>
+  </section>
+
+  <section class="card">
+    <h2>2. Masukkan data</h2>
+    <div class="tab" role="tablist" style="margin-top:10px">
+      <button role="tab" id="tab-tempel" aria-selected="true">Tempel dari Excel</button>
+      <button role="tab" id="tab-file" aria-selected="false">Pilih file</button>
+    </div>
+    <div id="panel-tempel">
+      <label for="teks">Salin sel di Excel/Google Sheets (Ctrl+C), lalu tempel di sini (Ctrl+V)</label>
+      <textarea id="teks" rows="7" placeholder="1001	Andi Pratama	4A	Mula	Merah	081234567890&#10;1002	Bagus Saputra	4A	Mula	Merah"></textarea>
+    </div>
+    <div id="panel-file" hidden>
+      <label for="file">File CSV atau Excel (.csv, .xlsx, .xls)</label>
+      <input type="file" id="file" accept=".csv,.txt,.xlsx,.xls,text/csv">
+      <p class="muted" id="info-file" style="margin-top:6px"></p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>3. Pengaturan</h2>
+    <div class="baris-form">
+      <div><label for="sandi">Kata sandi awal</label><input id="sandi" minlength="6" placeholder="minimal 6 karakter" autocomplete="new-password"></div>
+      <div><label for="tingkat">Tingkat bila kosong</label><select id="tingkat">
+        <optgroup label="Siaga"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></optgroup>
+        <optgroup label="Penggalang"><option value="ramu">Penggalang Ramu</option></optgroup></select></div>
+    </div>
+    <label class="cek" style="border:0;padding:8px 0;margin-top:4px"><input type="checkbox" id="perbarui"> <span>Perbarui kelas, tingkat, barung/regu, dan HP siswa yang <b>sudah ada</b> (NIS sama). Bila tidak dicentang, siswa yang sudah ada dilewati.</span></label>
+  </section>
+
+  <section id="pratinjau" hidden style="display:flex;flex-direction:column;gap:10px">
+    <div class="kepala-bagian"><h2>4. Periksa</h2><div id="ringkas" style="display:flex;gap:6px;flex-wrap:wrap"></div></div>
+    <div class="geser"><table id="tabel"></table></div>
+    <div id="progres-wrap" hidden><div class="progres" style="height:10px"><i id="progres" style="width:0%"></i></div><p class="muted" id="progres-teks" style="margin-top:4px"></p></div>
+    <button class="btn" id="impor" type="button">Impor</button>
+    <div id="hasil"></div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js?v=20261112"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina']); if(!p) return;
+  const $=id=>document.getElementById(id);
+  subNav($('subnav'),[['anggota.html','Siswa'],['impor_siswa.html','Impor'],['barung.html','Barung/Regu'],['pelantikan.html','Pelantikan']]);
+  $('sub').textContent=namaGudep(p.gudep);
+  let siswaAda=await ambilSiswa(p,{termasukNonaktif:true});
+  let baris=[];
+
+  /* ---------- Tab ---------- */
+  const pilihTab=file=>{$('tab-tempel').setAttribute('aria-selected',!file);$('tab-file').setAttribute('aria-selected',file);$('panel-tempel').hidden=file;$('panel-file').hidden=!file};
+  $('tab-tempel').onclick=()=>pilihTab(false); $('tab-file').onclick=()=>pilihTab(true);
+
+  /* ---------- Contoh format ---------- */
+  $('unduh-contoh').onclick=()=>{
+    const isi=['NIS;Nama;Kelas;Tingkat;Barung/Regu;HP Orang Tua;Kata Sandi',
+      '1001;Andi Pratama;4A;Siaga Mula;Merah;081234567890;','1002;Siti Rahma;6B;Penggalang Ramu;Elang;;rahasia123'].join('\r\n');
+    const url=URL.createObjectURL(new Blob(['﻿'+isi],{type:'text/csv;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download='contoh-impor-siswa.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+
+  /* ---------- Membaca teks CSV / tempelan Excel ---------- */
+  function bacaTeks(t){
+    t=t.replace(/^﻿/,'').replace(/\r\n?/g,'\n').trim(); if(!t) return [];
+    const pertama=t.split('\n')[0];
+    const pemisah=pertama.includes('\t')?'\t':(pertama.split(';').length>=pertama.split(',').length?';':',');
+    const hasil=[]; let sel='', row=[], kutip=false;
+    for(let i=0;i<t.length;i++){
+      const c=t[i];
+      if(kutip){ if(c==='"'&&t[i+1]==='"'){sel+='"';i++} else if(c==='"') kutip=false; else sel+=c; }
+      else if(c==='"'&&sel==='') kutip=true;
+      else if(c===pemisah){row.push(sel);sel=''}
+      else if(c==='\n'){row.push(sel);hasil.push(row);row=[];sel=''}
+      else sel+=c;
+    }
+    row.push(sel); hasil.push(row);
+    return hasil;
+  }
+  let sheetjs=null;
+  async function bacaExcel(file){
+    if(!sheetjs){
+      sheetjs=new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+        s.onload=()=>ok(window.XLSX);s.onerror=()=>{sheetjs=null;no(new Error('Pembaca Excel gagal dimuat. Simpan file sebagai CSV (File › Save As › CSV), lalu pilih lagi.'))};document.head.append(s)});
+    }
+    const XLSX=await sheetjs, wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''});
+  }
+
+  /* ---------- Mengenali kolom ---------- */
+  const KOLOM={nis:/^(nis|nisn|no\.?\s*induk|nomor\s*induk|nip)$/,nama:/^(nama|nama\s*lengkap|nama\s*siswa|nama\s*peserta\s*didik)$/,kelas:/^(kelas|rombel|rombongan\s*belajar)$/,
+    tingkat:/^(tingkat|tingkatan|golongan|sku|sku\s*yang\s*ditempuh)$/,barung:/^(barung|regu|barung\s*\/\s*regu|kelompok)$/,
+    hp_ortu:/^(hp|no\.?\s*hp|hp\s*orang\s*tua|no\.?\s*hp\s*orang\s*tua|hp\s*ortu|telepon|no\.?\s*telp|wa|whatsapp)$/,kata_sandi:/^(kata\s*sandi|sandi|password)$/};
+  const URUTAN=['nis','nama','kelas','tingkat','barung','hp_ortu','kata_sandi'];
+  function petakan(rows){
+    rows=rows.map(r=>r.map(c=>String(c??'').trim())).filter(r=>r.some(Boolean));
+    if(!rows.length) return [];
+    const kepala=rows[0].map(h=>h.toLowerCase().replace(/[*:]/g,'').trim());
+    const adaJudul=kepala.some(h=>KOLOM.nis.test(h)||KOLOM.nama.test(h));
+    const idx=adaJudul?Object.fromEntries(URUTAN.map(k=>[k,kepala.findIndex(h=>KOLOM[k].test(h))])):Object.fromEntries(URUTAN.map((k,i)=>[k,i]));
+    return (adaJudul?rows.slice(1):rows).map(r=>Object.fromEntries(URUTAN.map(k=>[k,idx[k]>=0?(r[idx[k]]||''):''])));
+  }
+  function tingkatDari(t){
+    t=t.toLowerCase(); if(!t) return $('tingkat').value;
+    if(/ramu|penggalang/.test(t)) return 'ramu'; if(/tata/.test(t)) return 'tata'; if(/bantu/.test(t)) return 'bantu'; if(/mula|siaga/.test(t)) return 'mula';
+    return null;
+  }
+
+  /* ---------- Pratinjau ---------- */
+  function periksa(rows){
+    const petaNis=new Map(siswaAda.map(s=>[String(s.nis_nip),s])), dipakai=new Set();
+    baris=petakan(rows).map((d,i)=>{
+      const nis=d.nis.replace(/^'/,'').replace(/\.0+$/,'').replace(/\s/g,'');
+      const r={no:i+1,nis,nama:d.nama.replace(/\s+/g,' '),kelas:d.kelas.replace(/^kelas\s*/i,'').slice(0,5),tingkat:tingkatDari(d.tingkat),
+        barung:d.barung.slice(0,20),hp_ortu:d.hp_ortu.replace(/[^\d+]/g,'').slice(0,16),kata_sandi:d.kata_sandi,status:'baru',alasan:''};
+      if(!/^\d{1,20}$/.test(nis)) {r.status='galat';r.alasan=nis?'NIS harus angka':'NIS kosong'}
+      else if(!r.nama) {r.status='galat';r.alasan='Nama kosong'}
+      else if(!r.tingkat) {r.status='galat';r.alasan=`Tingkat "${d.tingkat}" tidak dikenal`}
+      else if(dipakai.has(nis)) {r.status='galat';r.alasan='NIS ganda di data ini'}
+      else if(r.kata_sandi&&r.kata_sandi.length<6) {r.status='galat';r.alasan='Kata sandi kurang dari 6 karakter'}
+      else if(petaNis.has(nis)) {r.status='ada';r.id=petaNis.get(nis).id}
+      dipakai.add(nis); return r;
+    });
+    gambar();
+  }
+  function gambar(){
+    $('pratinjau').hidden=!baris.length; if(!baris.length) return;
+    const n=s=>baris.filter(r=>r.status===s).length, perbarui=$('perbarui').checked;
+    $('ringkas').innerHTML=`<span class="pil hijau">${n('baru')} baru</span><span class="pil">${n('ada')} sudah ada${perbarui?' (diperbarui)':' (dilewati)'}</span>${n('galat')?`<span class="pil merah">${n('galat')} bermasalah</span>`:''}`;
+    const label={baru:['Baru','hijau'],ada:[perbarui?'Diperbarui':'Dilewati',''],galat:['Bermasalah','merah'],ok:['Tersimpan','hijau'],gagal:['Gagal','merah']};
+    $('tabel').innerHTML=`<thead><tr><th>#</th><th>NIS</th><th>Nama</th><th>Kelas</th><th>Tingkat</th><th>Barung/Regu</th><th>HP ortu</th><th>Status</th></tr></thead><tbody>`+
+      baris.map(r=>`<tr><td>${r.no}</td><td>${esc(r.nis)}</td><td style="text-align:left">${esc(r.nama)}</td><td>${esc(r.kelas)}</td><td>${r.tingkat?esc(TINGKAT_PENDEK[r.tingkat]):'—'}</td>
+        <td>${esc(r.barung)}</td><td>${esc(r.hp_ortu)}</td><td><span class="pil ${label[r.status][1]}">${label[r.status][0]}</span>${r.alasan?`<div class="muted" style="white-space:normal;max-width:200px">${esc(r.alasan)}</div>`:''}</td></tr>`).join('')+'</tbody>';
+    const jumlah=n('baru')+(perbarui?n('ada'):0);
+    $('impor').disabled=!jumlah; $('impor').textContent=jumlah?`Impor ${jumlah} siswa`:'Tidak ada yang bisa diimpor';
+  }
+  $('teks').addEventListener('input',()=>periksa(bacaTeks($('teks').value)));
+  $('perbarui').onchange=gambar; $('tingkat').onchange=()=>{ if(!$('panel-tempel').hidden) periksa(bacaTeks($('teks').value)); else if(barisMentah) periksa(barisMentah) };
+  let barisMentah=null;
+  $('file').addEventListener('change',async()=>{
+    const f=$('file').files[0]; if(!f) return; $('info-file').textContent='Membaca file…';
+    try{
+      barisMentah=/\.xlsx?$/i.test(f.name)?await bacaExcel(f):bacaTeks(await f.text());
+      periksa(barisMentah); $('info-file').textContent=`${f.name}: ${baris.length} baris terbaca.`;
+    }catch(e){$('info-file').textContent=e.message;baris=[];gambar()}
+  });
+
+  // Bila data sudah ditempel sebelum halaman selesai dimuat, langsung periksa
+  if($('teks').value.trim()) periksa(bacaTeks($('teks').value));
+
+  /* ---------- Impor ---------- */
+  $('impor').addEventListener('click',async()=>{
+    const sandi=$('sandi').value, perbarui=$('perbarui').checked;
+    const baru=baris.filter(r=>r.status==='baru'), lama=perbarui?baris.filter(r=>r.status==='ada'):[];
+    if(baru.some(r=>!r.kata_sandi)&&sandi.length<6){toast('Isi kata sandi awal (minimal 6 karakter) di langkah 3');$('sandi').focus();return}
+    $('impor').disabled=true; $('progres-wrap').hidden=false;
+    const total=baru.length+lama.length; let selesai=0;
+    const maju=()=>{$('progres').style.width=(selesai/total*100)+'%';$('progres-teks').textContent=`${selesai} dari ${total} diproses…`};
+    maju();
+    // Siswa baru: dikirim per 20 ke Edge Function
+    for(let i=0;i<baru.length;i+=20){
+      const kelompok=baru.slice(i,i+20);
+      try{
+        const {hasil}=await kelolaAkun({aksi:'massal',daftar:kelompok.map(r=>({nis:r.nis,nama:r.nama,kelas:r.kelas||null,tingkat:r.tingkat,barung:r.barung||null,hp_ortu:r.hp_ortu||null,kata_sandi:r.kata_sandi||sandi}))});
+        hasil.forEach(h=>{const r=kelompok.find(x=>x.nis===String(h.nis));if(r){r.status=h.ok?'ok':'gagal';r.alasan=h.ok?'':h.error}});
+      }catch(e){kelompok.forEach(r=>{r.status='gagal';r.alasan=e.message})}
+      selesai+=kelompok.length; maju(); gambar();
+      if(kelompok.every(r=>r.status==='gagal')&&/belum dipasang|versi lama/.test(kelompok[0].alasan)) break;
+    }
+    // Siswa yang sudah ada: perbarui data profilnya
+    for(const r of lama){
+      const {error}=await db.from('profil_pengguna').update({nama:r.nama,kelas:r.kelas||null,tingkat:r.tingkat,barung:r.barung||null,hp_ortu:r.hp_ortu||null}).eq('id',r.id);
+      r.status=error?'gagal':'ok'; r.alasan=error?error.message:''; selesai++; maju();
+    }
+    gambar();
+    const ok=baris.filter(r=>r.status==='ok').length, gagal=baris.filter(r=>r.status==='gagal').length;
+    $('progres-teks').textContent=`Selesai: ${ok} berhasil${gagal?`, ${gagal} gagal (lihat kolom Status)`:''}.`;
+    $('hasil').innerHTML=ok?`<a class="btn kedua" href="anggota.html">Lihat daftar siswa</a>`:'';
+    siswaAda=await ambilSiswa(p,{termasukNonaktif:true});
+    $('impor').disabled=true; $('impor').textContent=gagal?'Perbaiki baris yang gagal, lalu tempel ulang':'Impor selesai';
+  });
+})();
+</script></body></html>

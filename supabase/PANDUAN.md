@@ -36,6 +36,10 @@ where a.ctid < b.ctid and a.siswa_id = b.siswa_id and a.tanggal = b.tanggal;
 Akun pembina dibuat mabigus dari aplikasi (menu **Pembina**), dan akun siswa dibuat pembina (menu **Anggota**).
 
 ## 4. Pasang Edge Function `buat-akun`
+> **Sudah pernah memasang?** Setiap kali `supabase/functions/buat-akun/index.ts` diperbarui, buka Edge Functions › buat-akun,
+> tempel ulang seluruh kodenya, lalu Deploy. Versi terbaru dibutuhkan untuk impor siswa, ubah NIS/NIP, atur ulang kata sandi,
+> dan hapus akun. Bila masih versi lama, aplikasi menampilkan pesan "Fungsi buat-akun di Supabase masih versi lama".
+
 Fungsi ini membuat akun login baru. Kuncinya (`service_role`) hanya ada di server Supabase, tidak pernah di browser.
 
 **Cara A — lewat Dashboard (tanpa instal apa pun):**

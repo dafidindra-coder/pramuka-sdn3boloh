@@ -64,6 +64,7 @@ const IKON={
   barung:'<path d="M5 21V3M5 4h12l-3 4 3 4H5"/>',
   pelantikan:'<circle cx="12" cy="9" r="5"/><path d="M9 13.5 7.5 21l4.5-2.5 4.5 2.5-1.5-7.5M12 6.5l.8 1.6 1.7.2-1.2 1.2.3 1.7-1.6-.8-1.6.8.3-1.7-1.2-1.2 1.7-.2z"/>',
   rekap:'<path d="M5 20V10M12 20V4M19 20v-7"/>',
+  kamera:'<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
   keluar:'<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h10"/>'
 };
 const ikon=(n,c='')=>`<svg class="ikon ${c}" viewBox="0 0 24 24" aria-hidden="true">${IKON[n]}</svg>`;
@@ -76,11 +77,12 @@ function renderNav(p){
     siswa:[]
   }[p.role]||[];
   // Halaman turunan menyalakan menu induknya (mis. Barung & Pelantikan ada di bawah Anggota untuk pembina)
-  const induk=p.role==='pembina'?({'barung.html':'anggota.html','pelantikan.html':'anggota.html','kelola_sku.html':'uji_sku.html','rekap.html':'dashboard.html'}[hal]||hal)
+  const induk=p.role==='pembina'?({'barung.html':'anggota.html','pelantikan.html':'anggota.html','impor_siswa.html':'anggota.html','kelola_sku.html':'uji_sku.html','rekap.html':'dashboard.html'}[hal]||hal)
     :({'kelola_sku.html':'dashboard.html'}[hal]||hal);
   const n=document.getElementById('nav');
   n.className='atas';
   n.innerHTML=`<img src="logo.png" alt="" class="logo-kecil"><div class="judul-app"><b>Pramuka SDN 3 Boloh</b><span>${esc(p.nama)} · ${esc({mabigus:'Mabigus',pembina:'Pembina',siswa:'Siswa'}[p.role])}</span></div>
+    <a href="dashboard.html" class="avatar-atas" aria-label="Profil saya">${avatar(p,36)}</a>
     <button id="keluar" class="tombol-ikon" aria-label="Keluar">${ikon('keluar')}</button>`;
   document.getElementById('keluar').onclick=async()=>{await db.auth.signOut();location.href='index.html'};
   if(menu.length>1){
@@ -99,16 +101,51 @@ function subNav(el,items){
   el.innerHTML=items.map(([h,t])=>`<a href="${h}" class="${h===hal?'aktif':''}" ${h===hal?'aria-current="page"':''}>${t}</a>`).join('');
 }
 
-/* Membuat akun login lewat Edge Function "buat-akun" (service_role hanya ada di server) */
-async function buatAkun(body){
+/* Kelola akun login lewat Edge Function "buat-akun" (service_role hanya ada di server).
+   body.aksi: buat (bawaan) | massal | ubah_nomor | ubah_sandi | hapus */
+async function kelolaAkun(body){
   const {data,error}=await db.functions.invoke('buat-akun',{body});
+  let j=data;
   if(error){
-    let m=error.message; try{const j=await error.context.json(); m=j.error||(error.context.status===404?'not found':m)}catch(_){}
-    if(/failed to send|not found|404/i.test(m)) m='Fungsi "buat-akun" belum dipasang di Supabase. Lihat supabase/functions/buat-akun.';
+    let m=error.message;
+    try{j=await error.context.json(); m=j.error||(error.context.status===404?'not found':m)}catch(_){j=null}
+    if(/failed to send|not found|404/i.test(m)&&!j?.versi) m='Fungsi "buat-akun" belum dipasang di Supabase. Lihat supabase/PANDUAN.md langkah 4.';
+    else if(body.aksi&&body.aksi!=='buat'&&j&&!j.versi) m='Fungsi "buat-akun" di Supabase masih versi lama. Perbarui kodenya (lihat supabase/PANDUAN.md langkah 4).';
     throw new Error(m);
   }
-  if(data?.error) throw new Error(data.error);
-  return data;
+  if(body.aksi&&body.aksi!=='buat'&&!j?.versi) throw new Error('Fungsi "buat-akun" di Supabase masih versi lama. Perbarui kodenya (lihat supabase/PANDUAN.md langkah 4).');
+  if(j?.error) throw new Error(j.error);
+  return j;
+}
+const buatAkun = body => kelolaAkun({...body,aksi:'buat'});
+
+/* ---------- Foto profil ---------- */
+/* Lingkaran foto, atau inisial nama bila belum ada foto */
+function avatar(p,ukuran=40){
+  const inisial=String(p?.nama||'?').replace(/[^A-Za-z ]/g,' ').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase()||'?';
+  const gaya=`width:${ukuran}px;height:${ukuran}px;font-size:${Math.round(ukuran*.38)}px`;
+  return p?.foto&&/^data:image\//.test(p.foto)
+    ? `<img class="avatar" src="${esc(p.foto)}" alt="" style="${gaya}">`
+    : `<span class="avatar avatar-inisial" aria-hidden="true" style="${gaya}">${esc(inisial)}</span>`;
+}
+/* Minta pengguna memilih foto, potong persegi di tengah, perkecil ke 192px JPEG. Hasil: data URL atau null */
+function pilihFoto(){
+  return new Promise((selesai,gagal)=>{
+    const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+    inp.onchange=()=>{
+      const f=inp.files[0]; if(!f) return selesai(null);
+      if(!/^image\//.test(f.type)) return gagal(new Error('Pilih file gambar (JPG atau PNG).'));
+      const url=URL.createObjectURL(f), img=new Image();
+      img.onload=()=>{
+        const s=Math.min(img.width,img.height), c=document.createElement('canvas'); c.width=c.height=192;
+        c.getContext('2d').drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,192,192);
+        URL.revokeObjectURL(url); selesai(c.toDataURL('image/jpeg',.8));
+      };
+      img.onerror=()=>{URL.revokeObjectURL(url);gagal(new Error('Gambar tidak bisa dibaca. Coba foto lain.'))};
+      img.src=url;
+    };
+    inp.click();
+  });
 }
 
 /* Daftar siswa yang boleh dikelola: Pembina -> hanya Gudep-nya. Siswa nonaktif disembunyikan kecuali diminta. */

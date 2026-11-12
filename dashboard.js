@@ -59,8 +59,24 @@
     :'<p class="muted" style="margin-top:8px">Belum ada absensi.</p>';
 
   const ubin=(href,ik,judul,info='')=>`<a class="ubin" href="${href}">${ikon(ik)}<span><b>${judul}</b>${info?`<small>${info}</small>`:''}</span></a>`;
+  /* Kartu profil dengan foto; pengguna bisa mengganti fotonya sendiri */
+  const kartuProfil=(label,judul,ekstra='')=>`<section class="card profil-saya"><div class="foto-saya"><span id="foto-saya">${avatar(p,72)}</span>
+      <button class="ganti-foto" id="ganti-foto" type="button" aria-label="Ganti foto profil" title="Ganti foto">${ikon('kamera')}</button></div>
+    <div style="min-width:0;flex:1"><div class="label">${label}</div><h1>${judul}</h1>${ekstra}</div></section>`;
+  function pasangFoto(){
+    const b=document.getElementById('ganti-foto'); if(!b) return;
+    b.onclick=async()=>{
+      try{
+        const f=await pilihFoto(); if(!f) return;
+        b.disabled=true;
+        const {error}=await db.rpc('ubah_foto_saya',{p_foto:f});
+        if(error) throw new Error(/ubah_foto_saya|function|schema cache/i.test(error.message)?'Fitur foto belum aktif. Jalankan ulang supabase/perubahan_skema.sql di Supabase.':error.message);
+        p.foto=f; document.getElementById('foto-saya').innerHTML=avatar(p,72); toast('Foto profil diperbarui');
+      }catch(e){toast(e.message)}finally{b.disabled=false}
+    };
+  }
   const daftarPerhatian=list=>list.length
-    ?`<ul class="daftar">${list.map(({x,alasan})=>`<li><div><b>${esc(x.nama)}</b><div class="muted">${esc(x.kelas?'Kelas '+x.kelas+' · ':'')}${esc(namaGudep(x.gudep))}</div></div><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">${alasan.join('')}</div></li>`).join('')}</ul>`
+    ?`<ul class="daftar">${list.map(({x,alasan})=>`<li><div class="dengan-foto">${avatar(x,36)}<div><b>${esc(x.nama)}</b><div class="muted">${esc(x.kelas?'Kelas '+x.kelas+' · ':'')}${esc(namaGudep(x.gudep))}</div></div></div><div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">${alasan.join('')}</div></li>`).join('')}</ul>`
     :'<p class="muted">Tidak ada. Semua siswa rajin hadir dan iurannya lancar.</p>';
 
   function bagianAgenda(){
@@ -97,7 +113,7 @@
   /* ---------- Tampilan per peran ---------- */
   if(p.role==='pembina'){
     const h=hitung(siswa);
-    isi.innerHTML=`<div><div class="label">${esc(namaGudep(p.gudep))}</div><h1>Halo, Kak ${esc(p.nama.split(' ')[0])}</h1></div>
+    isi.innerHTML=`${kartuProfil(esc(namaGudep(p.gudep))+' · Pembina','Halo, Kak '+esc(p.nama.split(' ')[0]),`<div class="muted">${esc(p.nama)} · NIP ${esc(p.nis_nip)}</div>`)}
       <div class="grid">
         ${kartu('Siswa aktif',siswa.length,'anggota')}
         ${kartu('Kehadiran',h.pct+'%',`${h.hadir} dari ${h.total} catatan`)}
@@ -118,7 +134,7 @@
   } else if(p.role==='mabigus'){
     const per=Object.keys(GUDEP).map(g=>({g,daftar:siswa.filter(s=>s.gudep===g)})).map(o=>({...o,h:hitung(o.daftar)}));
     const semua=hitung(siswa);
-    isi.innerHTML=`<div><div class="label">Mabigus · semua Gudep</div><h1>${esc(p.nama)}</h1></div>
+    isi.innerHTML=`${kartuProfil('Mabigus · semua Gudep',esc(p.nama),`<div class="muted">NIP ${esc(p.nis_nip)}</div>`)}
       ${menunggu.length?`<a class="sorotan" href="pelantikan.html">${ikon('pelantikan')}<span><b>${menunggu.length} pengajuan pelantikan menunggu persetujuan</b><small>Ketuk untuk memeriksa dan memutuskan</small></span><span aria-hidden="true">›</span></a>`:''}
       <div class="ubin-grid">
         ${ubin('pembina.html','pembina','Pembina','tambah &amp; ubah')}
@@ -143,10 +159,10 @@
     const lulus=new Set(sku.data.map(x=>x.kode_sku)), {tk,pr,siap}=statusSiswaSku(p,lulus);
     const ajuanSaya=menunggu.find(m=>m.siswa_id===p.id);
     const STATUS={H:['Hadir','hijau'],S:['Sakit','kuning'],I:['Izin',''],A:['Alfa','merah']};
-    isi.innerHTML=`<section class="card"><div class="label">${esc(namaGudep(p.gudep))}${p.kelas?' · Kelas '+esc(p.kelas):''}</div><h1>${esc(p.nama)}</h1>
+    isi.innerHTML=`${kartuProfil(esc(namaGudep(p.gudep))+(p.kelas?' · Kelas '+esc(p.kelas):''),esc(p.nama),`
         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${p.tingkat_dilantik?`<span class="pil hijau">Dilantik ${esc(TINGKAT[p.tingkat_dilantik])}</span>`:`<span class="pil">Calon ${GOLONGAN[tk]==='penggalang'?'Penggalang':'Siaga'}</span>`}
           ${p.tingkat_dilantik!==tk?`<span class="pil">Menempuh SKU ${esc(TINGKAT_PENDEK[tk])}</span>`:''}${p.barung?`<span class="pil">${namaKelompok(tk)} ${esc(p.barung)}</span>`:''}</div>
-        ${ajuanSaya?`<p class="info" style="margin-top:10px">Pelantikan ${esc(TINGKAT[ajuanSaya.tingkat])} sudah diajukan pembina dan menunggu persetujuan mabigus.</p>`:''}</section>
+        ${ajuanSaya?`<p class="info" style="margin-top:10px">Pelantikan ${esc(TINGKAT[ajuanSaya.tingkat])} sudah diajukan pembina dan menunggu persetujuan mabigus.</p>`:''}`)}
       <div class="grid">${kartu('Kehadiran',pct+'%',`${hadir} dari ${a.length} latihan`)}${kartu('Iuran '+tahun,lunas+'/12',kurang?`<span class="pil kuning">kurang ${kurang} bulan</span>`:'<span class="pil hijau">lancar</span>')}
         ${kartu('SKU '+TINGKAT_PENDEK[tk],`${pr[tk].lulus}/${pr[tk].total}`,siap?'<span class="pil hijau">siap dilantik</span>':'butir lulus')}</div>
       <section class="card"><h2>Iuran ${tahun}</h2><div class="bulan12">${BULAN.map((b,i)=>`<span class="${r[b]?'lunas':i<=bulanIni?'telat':''}" title="${NAMA_BULAN[i]}: ${r[b]?'lunas':'belum'}">${NAMA_BULAN[i]}</span>`).join('')}</div>
@@ -160,5 +176,5 @@
         `<li><span>${esc(tglPanjang(x.tanggal))}</span><span class="pil ${STATUS[x.status]?.[1]||''}">${STATUS[x.status]?.[0]||esc(x.status)}</span></li>`).join('')}</ul>`:'<p class="muted">Belum ada absensi.</p>'}</section>
       ${bagianAgenda()}`;
   }
-  pasangAgenda();
+  pasangAgenda(); pasangFoto();
 })();
