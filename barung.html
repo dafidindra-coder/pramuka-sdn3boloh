@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Barung &amp; Regu — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261022">
+<link rel="stylesheet" href="style.css?v=20261112">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -16,13 +16,13 @@
   <div id="daftar" style="display:flex;flex-direction:column;gap:12px"><div class="kerangka"></div><div class="kerangka"></div></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261022"></script>
-<script src="sku.js?v=20261022"></script>
+<script src="config.js?v=20261112"></script>
+<script src="sku.js?v=20261112"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
   const $=id=>document.getElementById(id);
-  if(p.role==='pembina') subNav($('subnav'),[['anggota.html','Daftar siswa'],['barung.html','Barung/Regu'],['pelantikan.html','Pelantikan']]);
+  if(p.role==='pembina') subNav($('subnav'),[['anggota.html','Siswa'],['impor_siswa.html','Impor'],['barung.html','Barung/Regu'],['pelantikan.html','Pelantikan']]);
   else {$('subnav').remove();$('pilih-gudep').hidden=false}
   const [siswa]=await Promise.all([ambilSiswa(p),muatMateriSku()]);
   const ids=siswa.map(s=>s.id), kosong={data:[],error:null};
@@ -57,7 +57,7 @@
           <div style="text-align:right"><b style="font-variant-numeric:tabular-nums">${t?Math.round(h/t*100):0}%</b><div class="muted">hadir</div></div></div>
         ${siap?`<p style="margin-top:8px"><span class="pil kuning">${siap} siap dilantik</span></p>`:''}
         <ul class="daftar" style="margin-top:8px">${anggota.map(s=>{const x=info[s.id], pr=x.pr[x.tk];
-          return `<li><div style="flex:1"><div class="kepala-bagian" style="margin:0"><b>${esc(s.nama)}</b><span class="muted">${x.pct==null?'—':x.pct+'%'}</span></div>
+          return `<li>${avatar(s,36)}<div style="flex:1;min-width:0"><div class="kepala-bagian" style="margin:0"><b>${esc(s.nama)}</b><span class="muted">${x.pct==null?'—':x.pct+'%'}</span></div>
             <div class="muted" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${esc(TINGKAT[x.tk])} · SKU ${pr.lulus}/${pr.total}${s.kelas?' · Kelas '+esc(s.kelas):''}</div>
             <div class="progres ${skuPenuh(pr)?'penuh':''}" style="margin-top:4px;height:6px"><i style="width:${lebarPersen(pr)}%"></i></div></div>
             ${p.role==='pembina'?`<a class="tombol-hapus" style="display:grid;place-items:center;text-decoration:none" href="anggota.html#ubah-${encodeURIComponent(s.id)}" aria-label="Ubah ${esc(s.nama)}">Ubah</a>`:''}</li>`}).join('')}</ul></section>`}).join('')

@@ -168,8 +168,8 @@ dialog form{padding:16px}
 .tombol-dialog{display:flex;gap:8px;margin-top:16px}
 
 /* Sub menu (tab tautan) */
-.subnav{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:-2px 0 0}
-.subnav a{flex:none;padding:8px 14px;border-radius:999px;border:1px solid var(--garis-kuat);color:var(--teks-2);text-decoration:none;font-size:.86rem;font-weight:600;background:var(--kartu)}
+.subnav{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 0}
+.subnav a{flex:none;padding:7px 12px;border-radius:999px;border:1px solid var(--garis-kuat);color:var(--teks-2);text-decoration:none;font-size:.86rem;font-weight:600;background:var(--kartu)}
 .subnav a.aktif{background:#5d4037;border-color:#5d4037;color:#fff}
 
 /* Ubin pintasan di Beranda */
@@ -211,3 +211,25 @@ textarea{resize:vertical;line-height:1.4}
 body.ada-menu .hak-cipta{bottom:calc(66px + env(safe-area-inset-bottom,0px))}
 body{padding-bottom:26px}
 body.ada-menu{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+
+/* Foto profil */
+.avatar{border-radius:50%;object-fit:cover;flex:none;display:inline-block;background:var(--aksen-lembut)}
+.avatar-inisial{display:inline-grid;place-items:center;font-weight:700;color:var(--aksen);background:var(--aksen-lembut);letter-spacing:.02em}
+.dengan-foto{display:flex;gap:10px;align-items:center;min-width:0}
+.dengan-foto>div{min-width:0}
+.avatar-atas{flex:none;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.4);line-height:0}
+.avatar-atas .avatar-inisial{background:rgba(255,255,255,.18);color:#fff}
+.profil-saya{display:flex;gap:14px;align-items:center}
+.foto-saya{position:relative;flex:none;line-height:0}
+.ganti-foto{position:absolute;right:-4px;bottom:-4px;width:32px;height:32px;border-radius:50%;border:2px solid var(--kartu);
+  background:#5d4037;color:#fff;display:grid;place-items:center;cursor:pointer;padding:0}
+.ganti-foto .ikon{width:16px;height:16px}
+.ganti-foto:disabled{opacity:.6}
+.foto-baris{display:flex;gap:12px;align-items:center;margin:8px 0 4px}
+
+/* Zona hapus akun */
+.zona-bahaya{margin-top:16px;border:1px solid var(--merah);border-radius:12px;padding:10px 12px;background:var(--merah-lembut)}
+.zona-bahaya summary{cursor:pointer;color:var(--merah);font-weight:600}
+.zona-bahaya p{font-size:.85rem;margin:8px 0}
+.btn.bahaya{background:var(--merah);color:#fff;margin-top:10px}
+.btn.bahaya:disabled{opacity:.45}

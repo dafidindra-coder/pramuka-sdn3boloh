@@ -50,7 +50,8 @@ alter table public.profil_pengguna
   add column if not exists barung           text,
   add column if not exists hp_ortu          text,
   add column if not exists no_hp            text,
-  add column if not exists aktif            boolean not null default true;
+  add column if not exists aktif            boolean not null default true,
+  add column if not exists foto             text;   -- foto profil kecil (data:image/jpeg;base64,...)
 
 alter table public.iuran_bulanan
   add column if not exists jan boolean not null default false, add column if not exists feb boolean not null default false,
@@ -343,6 +344,26 @@ on conflict (kode) do nothing;
 
 -- Catatan: kode SKU lama (SKU-01 s.d. SKU-05) dari versi awal aplikasi tidak dihapus,
 -- tetapi tidak tampil lagi. Siswa perlu dicentang ulang dengan butir baru.
+
+-- ---------------------------------------------------------------------
+-- 7b. Foto profil
+--     Foto disimpan sebagai gambar kecil di kolom foto, jadi ikut terlindungi aturan akses profil.
+--     Setiap pengguna boleh mengganti fotonya sendiri lewat fungsi ini (tanpa bisa mengubah kolom lain).
+-- ---------------------------------------------------------------------
+alter table public.profil_pengguna drop constraint if exists profil_foto_valid;
+alter table public.profil_pengguna add constraint profil_foto_valid
+  check (foto is null or (foto like 'data:image/%' and length(foto) <= 300000));
+
+create or replace function public.ubah_foto_saya(p_foto text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.pramuka_peran() is null then
+    raise exception 'Silakan masuk terlebih dahulu';
+  end if;
+  update public.profil_pengguna set foto = nullif(p_foto, '') where id = auth.uid();
+end $$;
+revoke all on function public.ubah_foto_saya(text) from public, anon;
+grant execute on function public.ubah_foto_saya(text) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- 8. Pemeriksaan: hasil query ini harus menampilkan 8 tabel dengan rls = true dan jumlah_aturan 2–3
