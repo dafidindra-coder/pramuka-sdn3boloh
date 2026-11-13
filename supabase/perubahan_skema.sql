@@ -365,6 +365,9 @@ end $$;
 revoke all on function public.ubah_foto_saya(text) from public, anon;
 grant execute on function public.ubah_foto_saya(text) to authenticated;
 
+-- Minta Supabase memuat ulang daftar tabel & fungsi (schema cache) agar perubahan langsung terlihat oleh aplikasi
+notify pgrst, 'reload schema';
+
 -- ---------------------------------------------------------------------
 -- 8. Pemeriksaan: hasil query ini harus menampilkan 8 tabel dengan rls = true dan jumlah_aturan 2–3
 -- ---------------------------------------------------------------------

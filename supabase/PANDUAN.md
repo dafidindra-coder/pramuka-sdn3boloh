@@ -83,4 +83,5 @@ npx supabase functions deploy buat-akun
 | "Fungsi buat-akun belum dipasang" | Langkah 4 belum | Deploy Edge Function |
 | "NIS/NIP atau kata sandi salah" | Email di Supabase tidak sama dengan `NIP@sdn3boloh.sch.id` | Periksa di Authentication > Users |
 | Setelah login kembali ke halaman masuk dengan pesan profil | User ada tetapi belum punya profil | Jalankan `akun_pertama.sql` (atau bagian opsionalnya) |
+| "Fitur foto belum aktif di database" | Fungsi `ubah_foto_saya` belum ada, atau Supabase belum memuat ulang daftar fungsinya | Jalankan `supabase/aktifkan_foto.sql` di SQL Editor (seluruh isinya, tanpa ada teks yang diblok) |
 | "Akun ini sudah dinonaktifkan" | Kolom `aktif` = false | Aktifkan lagi dari menu Pembina / Anggota |

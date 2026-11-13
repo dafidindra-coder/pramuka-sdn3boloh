@@ -70,7 +70,12 @@
         const f=await pilihFoto(); if(!f) return;
         b.disabled=true;
         const {error}=await db.rpc('ubah_foto_saya',{p_foto:f});
-        if(error) throw new Error(/ubah_foto_saya|function|schema cache/i.test(error.message)?'Fitur foto belum aktif. Jalankan ulang supabase/perubahan_skema.sql di Supabase.':error.message);
+        if(error){
+          console.error('ubah_foto_saya:',error);
+          throw new Error(/could not find the function|schema cache|does not exist/i.test(error.message)
+            ? 'Fitur foto belum aktif di database. Jalankan supabase/aktifkan_foto.sql di SQL Editor Supabase. (Pesan: '+error.message+')'
+            : 'Foto gagal disimpan: '+error.message);
+        }
         p.foto=f; document.getElementById('foto-saya').innerHTML=avatar(p,72); toast('Foto profil diperbarui');
       }catch(e){toast(e.message)}finally{b.disabled=false}
     };
