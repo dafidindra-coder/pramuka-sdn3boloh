@@ -233,3 +233,7 @@ body.ada-menu{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 .zona-bahaya p{font-size:.85rem;margin:8px 0}
 .btn.bahaya{background:var(--merah);color:#fff;margin-top:10px}
 .btn.bahaya:disabled{opacity:.45}
+
+/* Iuran per kelas */
+.hanya-lihat .bulan12 button:disabled{cursor:default;opacity:.75}
+tr.baris-saya td{background:var(--aksen-lembut)}
