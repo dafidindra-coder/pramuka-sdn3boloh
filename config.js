@@ -26,6 +26,8 @@ const hariIni = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD (lok
 
 /* Amankan teks sebelum dimasukkan ke innerHTML (mencegah XSS dari nama/keterangan) */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* Kelas ditulis seragam ("4 a" = "4A"), sama seperti fungsi pramuka_norm_kelas di database */
+const normKelas = k => String(k??'').replace(/\s/g,'').toUpperCase() || null;
 const rupiah = n => 'Rp ' + (n||0).toLocaleString('id-ID');
 const tglPendek = t => new Date(t+'T00:00').toLocaleDateString('id-ID',{day:'numeric',month:'short'});
 const tglPanjang = t => new Date(t+'T00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});

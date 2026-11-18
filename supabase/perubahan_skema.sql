@@ -106,6 +106,21 @@ create table if not exists public.agenda (
   dibuat_pada timestamptz not null default now()
 );
 
+-- Setoran uang iuran dari guru kelas ke kas Gudep (dikonfirmasi pembina lain / mabigus)
+create table if not exists public.setoran_iuran (
+  id            uuid primary key default gen_random_uuid(),
+  gudep         text not null check (gudep in ('05.093','05.122')),
+  kelas         text not null,
+  tanggal       date not null default current_date,
+  jumlah        integer not null check (jumlah > 0),
+  keterangan    text,
+  status        text not null default 'menunggu' check (status in ('menunggu','diterima')),
+  disetor_oleh  uuid not null default auth.uid(),
+  dibuat_pada   timestamptz not null default now(),
+  diterima_oleh uuid,
+  diterima_pada timestamptz
+);
+
 create table if not exists public.materi_sku (
   kode    text primary key,
   tingkat text not null check (tingkat in ('mula','bantu','tata','ramu')),
@@ -164,6 +179,23 @@ create or replace function public.pramuka_boleh_lihat(p_siswa uuid) returns bool
   language sql stable security definer set search_path = public
   as $$ select p_siswa = auth.uid() or public.pramuka_peran() = 'mabigus' or public.pramuka_pembina_dari(p_siswa) $$;
 
+-- Kelas ditulis seragam ("4 a" = "4A") agar guru kelas dan siswa bisa dicocokkan
+create or replace function public.pramuka_norm_kelas(p text) returns text
+  language sql immutable
+  as $$ select nullif(upper(regexp_replace(coalesce(p, ''), '\s', '', 'g')), '') $$;
+
+-- Kelas yang dipegang pembina yang sedang login (guru kelas); null bila belum ditetapkan
+create or replace function public.pramuka_kelas_saya() returns text
+  language sql stable security definer set search_path = public
+  as $$ select public.pramuka_norm_kelas(kelas) from public.profil_pengguna
+        where id = auth.uid() and aktif and role = 'pembina' $$;
+
+-- Boleh mengubah iuran siswa ini? Hanya guru kelas dari kelas siswa itu, di Gudep yang sama
+create or replace function public.pramuka_wali_kelas_dari(p_siswa uuid) returns boolean
+  language sql stable security definer set search_path = public
+  as $$ select coalesce(public.pramuka_pembina_dari(p_siswa)
+          and public.pramuka_kelas_saya() = (select public.pramuka_norm_kelas(kelas) from public.profil_pengguna where id = p_siswa), false) $$;
+
 -- Lindungi kolom penting: NIS/NIP dan peran tidak boleh diubah dari aplikasi,
 -- dan tingkatan yang sudah dilantik hanya berubah lewat persetujuan mabigus.
 create or replace function public.pramuka_jaga_profil() returns trigger
@@ -192,7 +224,7 @@ create trigger pramuka_jaga_profil before update on public.profil_pengguna
 do $$ declare r record; begin
   for r in select policyname, tablename from pg_policies
            where schemaname = 'public' and tablename in ('profil_pengguna','absensi_mingguan','iuran_bulanan','pencapaian_sku',
-             'kas_keluar','agenda','materi_sku','pengajuan_pelantikan')
+             'kas_keluar','agenda','materi_sku','pengajuan_pelantikan','setoran_iuran')
   loop
     execute format('drop policy %I on public.%I', r.policyname, r.tablename);
   end loop;
@@ -206,6 +238,7 @@ alter table public.kas_keluar           enable row level security;
 alter table public.agenda               enable row level security;
 alter table public.materi_sku           enable row level security;
 alter table public.pengajuan_pelantikan enable row level security;
+alter table public.setoran_iuran        enable row level security;
 
 -- profil_pengguna: lihat diri sendiri; pembina melihat Gudep-nya; mabigus melihat semua
 drop policy if exists "profil baca"                 on public.profil_pengguna;
@@ -232,8 +265,9 @@ create policy "absensi tulis" on public.absensi_mingguan for all    to authentic
 drop policy if exists "iuran baca"  on public.iuran_bulanan;
 drop policy if exists "iuran tulis" on public.iuran_bulanan;
 create policy "iuran baca"  on public.iuran_bulanan for select to authenticated using (public.pramuka_boleh_lihat(siswa_id));
+-- Iuran hanya dicatat guru kelas untuk siswa di kelasnya; pembina lain dan mabigus hanya melihat
 create policy "iuran tulis" on public.iuran_bulanan for all    to authenticated
-  using (public.pramuka_pembina_dari(siswa_id)) with check (public.pramuka_pembina_dari(siswa_id));
+  using (public.pramuka_wali_kelas_dari(siswa_id)) with check (public.pramuka_wali_kelas_dari(siswa_id));
 
 drop policy if exists "sku baca"  on public.pencapaian_sku;
 drop policy if exists "sku tulis" on public.pencapaian_sku;
@@ -262,6 +296,19 @@ create policy "agenda tulis" on public.agenda for insert to authenticated
   with check (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
 create policy "agenda hapus" on public.agenda for delete to authenticated
   using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
+
+-- setoran iuran: dilihat pembina Gudep itu dan mabigus; dicatat guru kelas; dibatalkan penyetor selama menunggu
+drop policy if exists "setoran baca"  on public.setoran_iuran;
+drop policy if exists "setoran catat" on public.setoran_iuran;
+drop policy if exists "setoran batal" on public.setoran_iuran;
+create policy "setoran baca" on public.setoran_iuran for select to authenticated
+  using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
+create policy "setoran catat" on public.setoran_iuran for insert to authenticated
+  with check (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()
+              and public.pramuka_kelas_saya() is not null and kelas = public.pramuka_kelas_saya()
+              and disetor_oleh = auth.uid() and status = 'menunggu' and diterima_oleh is null);
+create policy "setoran batal" on public.setoran_iuran for delete to authenticated
+  using (disetor_oleh = auth.uid() and status = 'menunggu');
 
 -- butir SKU: semua boleh membaca; pembina dan mabigus boleh menambah dan mengubah (tidak ada hapus)
 drop policy if exists "materi_sku baca"  on public.materi_sku;
@@ -311,6 +358,29 @@ begin
 end $$;
 revoke all on function public.putuskan_pelantikan(uuid, boolean, text) from public, anon;
 grant execute on function public.putuskan_pelantikan(uuid, boolean, text) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 6b. Konfirmasi setoran iuran: oleh pembina lain di Gudep yang sama, atau mabigus
+-- ---------------------------------------------------------------------
+create or replace function public.terima_setoran(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare r public.setoran_iuran;
+begin
+  select * into r from public.setoran_iuran where id = p_id for update;
+  if not found or r.status <> 'menunggu' then
+    raise exception 'Setoran tidak ditemukan atau sudah diterima';
+  end if;
+  if not (public.pramuka_peran() = 'mabigus'
+          or (public.pramuka_peran() = 'pembina' and public.pramuka_gudep() = r.gudep)) then
+    raise exception 'Anda tidak berhak menerima setoran ini';
+  end if;
+  if r.disetor_oleh = auth.uid() then
+    raise exception 'Setoran harus dikonfirmasi oleh pembina lain atau mabigus, bukan oleh penyetor';
+  end if;
+  update public.setoran_iuran set status = 'diterima', diterima_oleh = auth.uid(), diterima_pada = now() where id = p_id;
+end $$;
+revoke all on function public.terima_setoran(uuid) from public, anon;
+grant execute on function public.terima_setoran(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- 7. Isi awal butir SKU (CONTOH — sesuaikan lewat menu SKU > Kelola butir SKU)
@@ -369,11 +439,18 @@ grant execute on function public.ubah_foto_saya(text) to authenticated;
 notify pgrst, 'reload schema';
 
 -- ---------------------------------------------------------------------
--- 8. Pemeriksaan: hasil query ini harus menampilkan 8 tabel dengan rls = true dan jumlah_aturan 2–3
+-- 8. Pemeriksaan: SEMUA baris di hasil query ini harus ok = true
 -- ---------------------------------------------------------------------
-select c.relname as tabel, c.relrowsecurity as rls,
-       (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = c.relname) as jumlah_aturan
-from pg_class c join pg_namespace n on n.oid = c.relnamespace
-where n.nspname = 'public' and c.relname in ('profil_pengguna','absensi_mingguan','iuran_bulanan','pencapaian_sku',
-  'kas_keluar','agenda','materi_sku','pengajuan_pelantikan')
-order by 1;
+select 'tabel ' || t || ': aturan akses aktif' as cek,
+       coalesce((select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                 where n.nspname = 'public' and c.relname = t), false)
+       and exists(select 1 from pg_policies p where p.schemaname = 'public' and p.tablename = t) as ok
+from unnest(array['profil_pengguna','absensi_mingguan','iuran_bulanan','pencapaian_sku','kas_keluar',
+                  'agenda','materi_sku','pengajuan_pelantikan','setoran_iuran']) as t
+union all
+select 'fungsi ' || f, exists(select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                              where n.nspname = 'public' and p.proname = f)
+from unnest(array['putuskan_pelantikan','ubah_foto_saya','terima_setoran']) as f
+union all
+select 'kolom foto', exists(select 1 from information_schema.columns
+                            where table_schema = 'public' and table_name = 'profil_pengguna' and column_name = 'foto');

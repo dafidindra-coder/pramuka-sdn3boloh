@@ -8,14 +8,15 @@
   const siswa = p.role==='siswa' ? [p] : await ambilSiswa(p);
   const ids = siswa.map(s=>s.id);
   const kosong = {data:[],error:null};
-  const [abs,iur,sku,klr,agd,ajuan] = await Promise.all([
+  const [abs,iur,sku,klr,agd,ajuan,,str] = await Promise.all([   // posisi ke-7 = muatMateriSku()
     ids.length?db.from('absensi_mingguan').select('siswa_id,tanggal,status').in('siswa_id',ids):kosong,
     ids.length?db.from('iuran_bulanan').select('*').in('siswa_id',ids):kosong,
     ids.length?db.from('pencapaian_sku').select('siswa_id,kode_sku,tanggal').in('siswa_id',ids):kosong,
     p.role==='siswa'?kosong:(p.role==='pembina'?db.from('kas_keluar').select('gudep,jumlah').eq('gudep',p.gudep):db.from('kas_keluar').select('gudep,jumlah')),
     db.from('agenda').select('*').gte('tanggal',hariIni()).order('tanggal'),
     db.from('pengajuan_pelantikan').select('*').eq('status','menunggu'),
-    muatMateriSku()
+    muatMateriSku(),
+    p.role==='siswa'?kosong:(p.role==='pembina'?db.from('setoran_iuran').select('gudep,jumlah,status').eq('gudep',p.gudep):db.from('setoran_iuran').select('gudep,jumlah,status'))
   ]);
   const menunggu=ajuan.error?[]:ajuan.data;   // tabel belum dibuat -> anggap kosong
   if(abs.error||iur.error||sku.error){ tampilError(isi,'Data Beranda gagal dimuat',abs.error||iur.error||sku.error); return; }
@@ -50,7 +51,12 @@
       if(nunggak>=3) alasan.push(`<span class="pil kuning">Iuran kurang ${nunggak} bulan</span>`);
       if(alasan.length) perhatian.push({x,alasan});
     });
-    return {total:a.length,hadir,pct:a.length?Math.round(hadir/a.length*100):0,seri,masuk:lunas*IURAN_PER_BULAN,keluar,
+    // Kas Gudep = setoran guru kelas yang sudah diterima − pengeluaran. Sisanya masih dipegang guru kelas.
+    // Bila tabel setoran belum dibuat (SQL lama), semua iuran dianggap sudah masuk kas.
+    const masuk=lunas*IURAN_PER_BULAN;
+    const diterima=str?.error?masuk:(str.data||[]).filter(r=>gudepSet.has(r.gudep)&&r.status==='diterima').reduce((n,r)=>n+r.jumlah,0);
+    const menungguSetor=str?.error?0:(str.data||[]).filter(r=>gudepSet.has(r.gudep)&&r.status==='menunggu').length;
+    return {total:a.length,hadir,pct:a.length?Math.round(hadir/a.length*100):0,seri,masuk,keluar,kas:diterima-keluar,diGuru:masuk-diterima,menungguSetor,
       lunas,skuN:s.length,siap,siapList,perhatian};
   }
 
@@ -118,11 +124,11 @@
   /* ---------- Tampilan per peran ---------- */
   if(p.role==='pembina'){
     const h=hitung(siswa);
-    isi.innerHTML=`${kartuProfil(esc(namaGudep(p.gudep))+' · Pembina','Halo, Kak '+esc(p.nama.split(' ')[0]),`<div class="muted">${esc(p.nama)} · NIP ${esc(p.nis_nip)}</div>`)}
+    isi.innerHTML=`${kartuProfil(esc(namaGudep(p.gudep))+' · Pembina'+(normKelas(p.kelas)?' · Guru kelas '+esc(normKelas(p.kelas)):''),'Halo, Kak '+esc(p.nama.split(' ')[0]),`<div class="muted">${esc(p.nama)} · NIP ${esc(p.nis_nip)}</div>`)}
       <div class="grid">
         ${kartu('Siswa aktif',siswa.length,'anggota')}
         ${kartu('Kehadiran',h.pct+'%',`${h.hadir} dari ${h.total} catatan`)}
-        ${kartu('Saldo kas',rupiah(h.masuk-h.keluar),`Masuk ${rupiah(h.masuk)} · Keluar ${rupiah(h.keluar)}`)}
+        ${kartu('Kas Gudep',rupiah(h.kas),`Di guru kelas ${rupiah(h.diGuru)} · Keluar ${rupiah(h.keluar)}${h.menungguSetor?`<br><span class="pil kuning">${h.menungguSetor} setoran menunggu</span>`:''}`)}
         ${kartu('SKU lulus',h.skuN,h.siap?`<span class="pil hijau">${h.siap} siap dilantik</span>`:'butir materi')}
       </div>
       <a class="btn" href="absensi.html">${ikon('absen')} Absen hari ini</a>
@@ -150,7 +156,7 @@
       <div class="grid lebar">${per.map(({g,daftar,h})=>`<section class="card"><div class="kepala-bagian"><h2>${esc(namaGudep(g))}</h2></div>
         <div class="stat">${h.pct}%</div><div class="muted">kehadiran · ${daftar.length} siswa</div>
         <div class="progres" style="margin:8px 0 10px"><i style="width:${h.pct}%"></i></div>
-        <ul class="daftar"><li><span class="muted">Saldo kas</span><b>${rupiah(h.masuk-h.keluar)}</b></li><li><span class="muted">SKU lulus</span><b>${h.skuN} butir</b></li>
+        <ul class="daftar"><li><span class="muted">Kas Gudep</span><b>${rupiah(h.kas)}</b></li><li><span class="muted">Masih di guru kelas</span><b>${rupiah(h.diGuru)}</b></li><li><span class="muted">SKU lulus</span><b>${h.skuN} butir</b></li>
         <li><span class="muted">Siap dilantik</span><b>${h.siap} siswa</b></li><li><span class="muted">Perlu perhatian</span><b>${h.perhatian.length} siswa</b></li></ul></section>`).join('')}</div>
       <a class="btn kedua" href="rekap.html">${ikon('rekap')} Lihat rekap lengkap</a>
       <section class="card"><h2>Kehadiran 8 latihan terakhir (gabungan)</h2>${grafik(semua.seri)}</section>
