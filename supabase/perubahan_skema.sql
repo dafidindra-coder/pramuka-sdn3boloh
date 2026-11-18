@@ -190,11 +190,13 @@ create or replace function public.pramuka_kelas_saya() returns text
   as $$ select public.pramuka_norm_kelas(kelas) from public.profil_pengguna
         where id = auth.uid() and aktif and role = 'pembina' $$;
 
--- Boleh mengubah iuran siswa ini? Hanya guru kelas dari kelas siswa itu, di Gudep yang sama
+-- Boleh mengubah iuran siswa ini? Hanya guru kelas dari kelas siswa itu.
+-- Satu kelas berisi siswa putra dan putri, jadi guru kelas memegang siswa kelasnya di kedua Gudep.
 create or replace function public.pramuka_wali_kelas_dari(p_siswa uuid) returns boolean
   language sql stable security definer set search_path = public
-  as $$ select coalesce(public.pramuka_pembina_dari(p_siswa)
-          and public.pramuka_kelas_saya() = (select public.pramuka_norm_kelas(kelas) from public.profil_pengguna where id = p_siswa), false) $$;
+  as $$ select coalesce(public.pramuka_peran() = 'pembina' and public.pramuka_kelas_saya() is not null
+          and public.pramuka_kelas_saya() = (select public.pramuka_norm_kelas(kelas) from public.profil_pengguna
+                                             where id = p_siswa and role = 'siswa'), false) $$;
 
 -- Lindungi kolom penting: NIS/NIP dan peran tidak boleh diubah dari aplikasi,
 -- dan tingkatan yang sudah dilantik hanya berubah lewat persetujuan mabigus.
@@ -246,7 +248,9 @@ drop policy if exists "pembina ubah siswa gudepnya" on public.profil_pengguna;
 drop policy if exists "mabigus ubah pembina"        on public.profil_pengguna;
 create policy "profil baca" on public.profil_pengguna for select to authenticated
   using (id = auth.uid() or public.pramuka_peran() = 'mabigus'
-         or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
+         or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep())
+         -- guru kelas melihat siswa kelasnya dari Gudep lain
+         or (role = 'siswa' and public.pramuka_kelas_saya() is not null and public.pramuka_norm_kelas(kelas) = public.pramuka_kelas_saya()));
 create policy "pembina ubah siswa gudepnya" on public.profil_pengguna for update to authenticated
   using      (public.pramuka_peran() = 'pembina' and role = 'siswa' and gudep = public.pramuka_gudep())
   with check (public.pramuka_peran() = 'pembina' and role = 'siswa' and gudep = public.pramuka_gudep());
@@ -264,7 +268,8 @@ create policy "absensi tulis" on public.absensi_mingguan for all    to authentic
 
 drop policy if exists "iuran baca"  on public.iuran_bulanan;
 drop policy if exists "iuran tulis" on public.iuran_bulanan;
-create policy "iuran baca"  on public.iuran_bulanan for select to authenticated using (public.pramuka_boleh_lihat(siswa_id));
+create policy "iuran baca"  on public.iuran_bulanan for select to authenticated
+  using (public.pramuka_boleh_lihat(siswa_id) or public.pramuka_wali_kelas_dari(siswa_id));
 -- Iuran hanya dicatat guru kelas untuk siswa di kelasnya; pembina lain dan mabigus hanya melihat
 create policy "iuran tulis" on public.iuran_bulanan for all    to authenticated
   using (public.pramuka_wali_kelas_dari(siswa_id)) with check (public.pramuka_wali_kelas_dari(siswa_id));
@@ -297,14 +302,16 @@ create policy "agenda tulis" on public.agenda for insert to authenticated
 create policy "agenda hapus" on public.agenda for delete to authenticated
   using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
 
--- setoran iuran: dilihat pembina Gudep itu dan mabigus; dicatat guru kelas; dibatalkan penyetor selama menunggu
+-- setoran iuran: masuk ke kas Gudep siswa; dilihat pembina Gudep itu, mabigus, dan penyetornya;
+-- dicatat guru kelas (ke Gudep mana pun, untuk kelasnya); dibatalkan penyetor selama menunggu
 drop policy if exists "setoran baca"  on public.setoran_iuran;
 drop policy if exists "setoran catat" on public.setoran_iuran;
 drop policy if exists "setoran batal" on public.setoran_iuran;
 create policy "setoran baca" on public.setoran_iuran for select to authenticated
-  using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
+  using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep())
+         or disetor_oleh = auth.uid());
 create policy "setoran catat" on public.setoran_iuran for insert to authenticated
-  with check (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()
+  with check (public.pramuka_peran() = 'pembina'
               and public.pramuka_kelas_saya() is not null and kelas = public.pramuka_kelas_saya()
               and disetor_oleh = auth.uid() and status = 'menunggu' and diterima_oleh is null);
 create policy "setoran batal" on public.setoran_iuran for delete to authenticated

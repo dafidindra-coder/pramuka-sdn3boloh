@@ -30,11 +30,12 @@
 
   <!-- ===== Setoran guru kelas ke kas Gudep ===== -->
   <section id="panel-setoran" role="tabpanel" aria-labelledby="tab-setoran" hidden style="display:flex;flex-direction:column;gap:12px">
-    <p class="muted">Guru kelas mengumpulkan iuran kelasnya, lalu menyetorkannya ke kas Gudep. Setoran dikonfirmasi oleh pembina lain atau mabigus.</p>
+    <p class="muted">Guru kelas mengumpulkan iuran kelasnya, lalu menyetorkannya ke kas Gudep siswa (Putra atau Putri). Setoran dikonfirmasi oleh pembina Gudep itu atau mabigus.</p>
     <div class="geser"><table id="tabel-kelas"></table></div>
     <form id="form-setor" class="card" hidden>
       <h2 id="judul-setor">Catat setoran</h2>
       <div class="baris-form">
+        <div><label for="s-gudep">Setor ke</label><select id="s-gudep"></select></div>
         <div><label for="s-tgl">Tanggal</label><input type="date" id="s-tgl" required></div>
         <div><label for="s-jml">Jumlah (Rp)</label><input type="number" id="s-jml" inputmode="numeric" min="1" step="1" required></div>
       </div>
@@ -69,7 +70,15 @@
   const kelasSaya=normKelas(p.kelas);   // kelas yang dipegang pembina ini sebagai guru kelas
   $('sub').textContent=namaGudep(p.gudep)+(kelasSaya?' · Guru kelas '+kelasSaya:'');
   thn.value=new Date().getFullYear(); $('k-tgl').value=hariIni(); $('s-tgl').value=hariIni();
-  const siswa=await ambilSiswa(p), ids=siswa.map(s=>s.id);
+  // Siswa Gudep sendiri, ditambah siswa kelas yang dipegang (guru kelas) dari Gudep lain
+  const siswaGudep=await ambilSiswa(p);
+  let siswaLain=[];
+  if(kelasSaya){
+    const {data}=await db.from('profil_pengguna').select('*').eq('role','siswa').neq('gudep',p.gudep).order('nama');
+    siswaLain=(data||[]).filter(s=>s.aktif!==false&&normKelas(s.kelas)===kelasSaya);
+  }
+  const siswa=[...siswaGudep,...siswaLain].sort((a,b)=>a.nama.localeCompare(b.nama,'id')), ids=siswa.map(s=>s.id);
+  const labelGudep=g=>g===p.gudep?'':' · '+(GUDEP[g]?'Gudep '+GUDEP[g]:namaGudep(g));
   const semuaKelas=[...new Set(siswa.map(s=>normKelas(s.kelas)||'—'))].sort((a,b)=>a.localeCompare(b,'id',{numeric:true}));
   let peta={};
 
@@ -85,7 +94,7 @@
   pilihKelas.innerHTML='<option value="">Semua kelas</option>'+semuaKelas.map(k=>`<option value="${esc(k)}">Kelas ${esc(k)}${k===kelasSaya?' (kelas Anda)':''}</option>`).join('');
   pilihKelas.value=kelasSaya&&semuaKelas.includes(kelasSaya)?kelasSaya:'';
   $('info-guru').innerHTML=kelasSaya
-    ?`<p class="info">Anda guru kelas <b>${esc(kelasSaya)}</b>. Iuran kelas ini Anda yang mencatat; kelas lain hanya bisa dilihat.</p>`
+    ?`<p class="info">Anda guru kelas <b>${esc(kelasSaya)}</b>. Iuran semua siswa kelas ini (putra dan putri) Anda yang mencatat; kelas lain hanya bisa dilihat.</p>`
     :`<p class="info">Anda belum ditetapkan sebagai guru kelas, jadi iuran hanya bisa dilihat. Minta mabigus mengisi kelas Anda di menu Pembina.</p>`;
   const bolehUbah=s=>!!kelasSaya&&normKelas(s.kelas)===kelasSaya;
 
@@ -98,7 +107,7 @@
     if(!list.length){box.innerHTML='<div class="kosong"><b>Tidak ada siswa yang cocok</b></div>';return}
     box.innerHTML=list.map(s=>{const r=peta[s.id]||{}, n=BULAN.filter(b=>r[b]).length, boleh=bolehUbah(s);
       return `<div class="card ${boleh?'':'hanya-lihat'}" data-id="${esc(s.id)}"><div class="siswa-kepala"><div class="dengan-foto">${avatar(s,40)}<div><b>${esc(s.nama)}</b>
-          <div class="muted">${s.kelas?'Kelas '+esc(s.kelas):esc(s.nis_nip)}${boleh?'':' · hanya lihat'}</div></div></div>
+          <div class="muted">${s.kelas?'Kelas '+esc(s.kelas):esc(s.nis_nip)}${esc(labelGudep(s.gudep))}${boleh?'':' · hanya lihat'}</div></div></div>
         <span class="pil ${n===12?'hijau':''}" data-jml>${n}/12</span></div>
         <div class="bulan12">${BULAN.map((b,i)=>`<button type="button" data-b="${b}" class="${r[b]?'lunas':(tahunIni&&i<=bln?'telat':'')}" aria-pressed="${!!r[b]}" ${boleh?'':'disabled'}
           aria-label="${NAMA_BULAN[i]} ${r[b]?'lunas':'belum'}">${NAMA_BULAN[i]}</button>`).join('')}</div></div>`}).join('');
@@ -125,40 +134,51 @@
   async function dataUang(){
     const [iur,str,klr]=await Promise.all([
       ids.length?db.from('iuran_bulanan').select('*').in('siswa_id',ids):{data:[],error:null},
-      db.from('setoran_iuran').select('*').eq('gudep',p.gudep).order('tanggal',{ascending:false}),
+      db.from('setoran_iuran').select('*').order('tanggal',{ascending:false}),   // aturan akses: Gudep sendiri + setoran sendiri
       db.from('kas_keluar').select('*').eq('gudep',p.gudep).order('tanggal',{ascending:false})]);
-    const kelasDari=Object.fromEntries(siswa.map(s=>[s.id,normKelas(s.kelas)||'—']));
+    // Terkumpul per Gudep dan kelas (kunci "gudep|kelas"): uang iuran masuk ke kas Gudep siswanya
+    const kunciDari=Object.fromEntries(siswa.map(s=>[s.id,s.gudep+'|'+(normKelas(s.kelas)||'—')]));
     const terkumpul={};
-    (iur.data||[]).forEach(r=>{const k=kelasDari[r.siswa_id];if(k) terkumpul[k]=(terkumpul[k]||0)+BULAN.filter(b=>r[b]).length*IURAN_PER_BULAN});
+    (iur.data||[]).forEach(r=>{const k=kunciDari[r.siswa_id];if(k) terkumpul[k]=(terkumpul[k]||0)+BULAN.filter(b=>r[b]).length*IURAN_PER_BULAN});
     return {iur,str,klr,terkumpul};
   }
-  const jumlahSetoran=(list,k,status)=>list.filter(r=>(!k||normKelas(r.kelas)===k)&&r.status===status).reduce((n,r)=>n+r.jumlah,0);
+  const kunciSetoran=r=>r.gudep+'|'+normKelas(r.kelas);
+  const jumlahSetoran=(list,k,status)=>list.filter(r=>(!k||kunciSetoran(r)===k)&&r.status===status).reduce((n,r)=>n+r.jumlah,0);
+  const namaKunci=k=>{const [g,kl]=k.split('|');return 'Kelas '+kl+labelGudep(g)};
 
   /* ---- Setoran ---- */
   async function muatSetoran(){
     const rw=$('riwayat-setoran'); rw.innerHTML='<div class="kerangka"></div>';
     const {str,terkumpul}=await dataUang();
     if(str.error){tampilError(rw,'Setoran gagal dimuat',str.error);$('tabel-kelas').innerHTML='';return}
-    const list=str.data, kelasList=[...new Set([...Object.keys(terkumpul),...list.map(r=>normKelas(r.kelas))])].sort((a,b)=>a.localeCompare(b,'id',{numeric:true}));
-    const baris=kelasList.map(k=>{const t=terkumpul[k]||0, d=jumlahSetoran(list,k,'diterima'), m=jumlahSetoran(list,k,'menunggu');return {k,t,d,m,b:t-d-m}});
+    const list=str.data, urut=(a,b)=>(a.startsWith(p.gudep)?0:1)-(b.startsWith(p.gudep)?0:1)||a.localeCompare(b,'id',{numeric:true});
+    const kunciList=[...new Set([...Object.keys(terkumpul),...list.map(kunciSetoran)])].sort(urut);
+    const baris=kunciList.map(k=>{const t=terkumpul[k]||0, d=jumlahSetoran(list,k,'diterima'), m=jumlahSetoran(list,k,'menunggu');
+      return {k,kelas:k.split('|')[1],gudep:k.split('|')[0],t,d,m,b:t-d-m}});
     const tot=baris.reduce((a,r)=>({t:a.t+r.t,d:a.d+r.d,m:a.m+r.m,b:a.b+r.b}),{t:0,d:0,m:0,b:0});
     $('tabel-kelas').innerHTML=`<thead><tr><th>Kelas</th><th>Terkumpul</th><th>Diterima</th><th>Menunggu</th><th>Belum disetor</th></tr></thead><tbody>`+
-      baris.map(r=>`<tr class="${r.k===kelasSaya?'baris-saya':''}"><td>${esc(r.k)}${r.k===kelasSaya?' <span class="pil">Anda</span>':''}</td><td>${rupiah(r.t)}</td><td>${rupiah(r.d)}</td><td>${r.m?rupiah(r.m):'—'}</td>
+      baris.map(r=>`<tr class="${r.kelas===kelasSaya?'baris-saya':''}"><td>${esc(r.kelas)}${esc(labelGudep(r.gudep).replace(' · ',' '))}${r.kelas===kelasSaya?' <span class="pil">Anda</span>':''}</td><td>${rupiah(r.t)}</td><td>${rupiah(r.d)}</td><td>${r.m?rupiah(r.m):'—'}</td>
         <td>${r.b>0?`<b>${rupiah(r.b)}</b>`:rupiah(r.b)}</td></tr>`).join('')+
       `<tr><td><b>Total</b></td><td><b>${rupiah(tot.t)}</b></td><td><b>${rupiah(tot.d)}</b></td><td>${tot.m?rupiah(tot.m):'—'}</td><td><b>${rupiah(tot.b)}</b></td></tr></tbody>`;
     // Formulir hanya untuk guru kelas
     $('form-setor').hidden=!kelasSaya;
     if(kelasSaya){
-      const sisa=(baris.find(r=>r.k===kelasSaya)||{b:0}).b;
+      // Tujuan setoran: kas Gudep siswa (kelas yang sama bisa ada di Gudep Putra dan Putri)
+      const tujuan=baris.filter(r=>r.kelas===kelasSaya);
+      if(!tujuan.length) tujuan.push({gudep:p.gudep,b:0});
+      const pilih=$('s-gudep'), sebelum=pilih.value;
+      pilih.innerHTML=tujuan.map(r=>`<option value="${esc(r.gudep)}" data-sisa="${r.b}">Kas ${esc(namaGudep(r.gudep))} — belum disetor ${rupiah(Math.max(r.b,0))}</option>`).join('');
+      if(tujuan.some(r=>r.gudep===sebelum)) pilih.value=sebelum; else { const ada=tujuan.find(r=>r.b>0); if(ada) pilih.value=ada.gudep; }
       $('judul-setor').textContent=`Catat setoran kelas ${kelasSaya}`;
+      const sisa=+pilih.selectedOptions[0].dataset.sisa;
       if(!$('s-jml').value&&sisa>0) $('s-jml').value=sisa;
     }
     const menunggu=list.filter(r=>r.status==='menunggu').length;
     $('jml-menunggu').textContent=menunggu?`${menunggu} menunggu`:'';$('jml-menunggu').hidden=!menunggu;
     rw.innerHTML=list.length?`<ul class="daftar">${list.map(r=>{const milikSaya=r.disetor_oleh===p.id;
-      return `<li><div><b>Kelas ${esc(normKelas(r.kelas))} · ${rupiah(r.jumlah)}</b><div class="muted">${esc(tglPanjang(r.tanggal))}${r.keterangan?' · '+esc(r.keterangan):''}</div></div>
+      return `<li><div><b>Kelas ${esc(normKelas(r.kelas))} · ${rupiah(r.jumlah)}</b><div class="muted">Kas ${esc(namaGudep(r.gudep))} · ${esc(tglPanjang(r.tanggal))}${r.keterangan?' · '+esc(r.keterangan):''}</div></div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">${r.status==='diterima'?'<span class="pil hijau">Diterima</span>':'<span class="pil kuning">Menunggu</span>'}
-        ${r.status==='menunggu'&&!milikSaya?`<button class="btn kecil" data-terima="${esc(r.id)}" type="button">Terima</button>`:''}
+        ${r.status==='menunggu'&&!milikSaya&&r.gudep===p.gudep?`<button class="btn kecil" data-terima="${esc(r.id)}" type="button">Terima</button>`:''}
         ${r.status==='menunggu'&&milikSaya?`<button class="tombol-hapus" data-batal="${esc(r.id)}" type="button">Batalkan</button>`:''}</div></li>`}).join('')}</ul>`
       :'<p class="muted">Belum ada setoran.</p>';
   }
@@ -177,9 +197,10 @@
       toast('Setoran dibatalkan'); muatSetoran();
     }
   });
+  $('s-gudep').addEventListener('change',()=>{const sisa=+$('s-gudep').selectedOptions[0].dataset.sisa;$('s-jml').value=sisa>0?sisa:''});
   $('form-setor').addEventListener('submit',async e=>{
     e.preventDefault();
-    const {error}=await db.from('setoran_iuran').insert({gudep:p.gudep,kelas:kelasSaya,tanggal:$('s-tgl').value,
+    const {error}=await db.from('setoran_iuran').insert({gudep:$('s-gudep').value,kelas:kelasSaya,tanggal:$('s-tgl').value,
       jumlah:Math.round(+$('s-jml').value),keterangan:$('s-ket').value.trim()||null,disetor_oleh:p.id,status:'menunggu'});
     if(error) return toast('Gagal mencatat setoran: '+error.message);
     $('s-jml').value='';$('s-ket').value='';toast('Setoran dicatat, menunggu konfirmasi');muatSetoran();
@@ -192,9 +213,10 @@
     const {str,klr,terkumpul}=await dataUang();
     if(klr.error){tampilError(riwayat,'Kas keluar gagal dimuat',klr.error);$('saldo').innerHTML='';return}
     const keluar=klr.data.reduce((n,r)=>n+(r.jumlah||0),0);
-    const total=Object.values(terkumpul).reduce((a,b)=>a+b,0);
+    // Kas dihitung untuk Gudep sendiri saja
+    const total=Object.entries(terkumpul).filter(([k])=>k.startsWith(p.gudep+'|')).reduce((a,[,v])=>a+v,0);
     // Bila tabel setoran belum ada (SQL lama), pakai cara hitung lama: semua iuran dianggap kas
-    const diterima=str.error?total:jumlahSetoran(str.data,null,'diterima');
+    const diterima=str.error?total:str.data.filter(r=>r.gudep===p.gudep&&r.status==='diterima').reduce((n,r)=>n+r.jumlah,0);
     $('saldo').innerHTML=`<div class="card"><div class="label">Kas Gudep</div><div class="stat">${rupiah(diterima-keluar)}</div><div class="muted">setoran diterima ${rupiah(diterima)} − keluar</div></div>
       <div class="card"><div class="label">Masih di guru kelas</div><div class="stat" style="color:var(--teks-2)">${rupiah(total-diterima)}</div><div class="muted">iuran belum disetor / menunggu</div></div>
       <div class="card"><div class="label">Keluar</div><div class="stat" style="color:var(--merah)">${rupiah(keluar)}</div><div class="muted">${klr.data.length} pengeluaran</div></div>`;

@@ -1,6 +1,7 @@
 -- =====================================================================
 -- IURAN PER GURU KELAS + SETORAN (versi ringkas, tanpa menghapus apa pun; aman diulang)
 -- Untuk database yang sudah menjalankan perubahan_skema.sql versi sebelumnya.
+-- (Bila iuran_per_kelas.sql versi lama sudah pernah dijalankan, jalankan guru_kelas_lintas_gudep.sql.)
 -- Isinya sama dengan bagian iuran per kelas di perubahan_skema.sql.
 -- =====================================================================
 
@@ -30,10 +31,12 @@ create or replace function public.pramuka_kelas_saya() returns text
   as $$ select public.pramuka_norm_kelas(kelas) from public.profil_pengguna
         where id = auth.uid() and aktif and role = 'pembina' $$;
 
+-- Guru kelas memegang siswa kelasnya di kedua Gudep (putra dan putri)
 create or replace function public.pramuka_wali_kelas_dari(p_siswa uuid) returns boolean
   language sql stable security definer set search_path = public
-  as $$ select coalesce(public.pramuka_pembina_dari(p_siswa)
-          and public.pramuka_kelas_saya() = (select public.pramuka_norm_kelas(kelas) from public.profil_pengguna where id = p_siswa), false) $$;
+  as $$ select coalesce(public.pramuka_peran() = 'pembina' and public.pramuka_kelas_saya() is not null
+          and public.pramuka_kelas_saya() = (select public.pramuka_norm_kelas(kelas) from public.profil_pengguna
+                                             where id = p_siswa and role = 'siswa'), false) $$;
 
 -- 3. Iuran hanya dicatat guru kelas untuk siswa di kelasnya (aturan lama diubah, bukan dihapus)
 do $$ begin
@@ -50,11 +53,12 @@ end $$;
 do $$ begin
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'setoran_iuran' and policyname = 'setoran baca') then
     create policy "setoran baca" on public.setoran_iuran for select to authenticated
-      using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()));
+      using (public.pramuka_peran() = 'mabigus' or (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep())
+             or disetor_oleh = auth.uid());
   end if;
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'setoran_iuran' and policyname = 'setoran catat') then
     create policy "setoran catat" on public.setoran_iuran for insert to authenticated
-      with check (public.pramuka_peran() = 'pembina' and gudep = public.pramuka_gudep()
+      with check (public.pramuka_peran() = 'pembina'
                   and public.pramuka_kelas_saya() is not null and kelas = public.pramuka_kelas_saya()
                   and disetor_oleh = auth.uid() and status = 'menunggu' and diterima_oleh is null);
   end if;
