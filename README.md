@@ -9,8 +9,8 @@ Aplikasi administrasi kepramukaan SDN 3 Boloh (Gudep 05.093 Putra & 05.122 Putri
 
 ## Iuran per guru kelas
 Mabigus menetapkan kelas untuk pembina yang menjadi guru kelas (menu Pembina › Ubah › "Guru kelas untuk kelas").
-Guru kelas mencatat iuran siswa di kelasnya saja; pembina lain dan mabigus hanya melihat.
-Uang iuran disetorkan guru kelas lewat Iuran › Setoran, lalu dikonfirmasi pembina lain atau mabigus.
+Guru kelas mencatat iuran semua siswa di kelasnya, putra maupun putri (kedua Gudep); pembina lain dan mabigus hanya melihat.
+Uang iuran disetorkan guru kelas lewat Iuran › Setoran ke kas Gudep siswanya (Putra atau Putri), lalu dikonfirmasi pembina Gudep itu atau mabigus.
 Kas Gudep = setoran yang sudah diterima − pengeluaran; sisanya tampil sebagai "masih di guru kelas".
 
 Setiap pengguna punya foto profil yang bisa diganti sendiri dari Beranda.
