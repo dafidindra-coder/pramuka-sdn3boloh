@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Impor Siswa — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261118">
+<link rel="stylesheet" href="style.css?v=20261126">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -15,9 +15,10 @@
 
   <section class="card">
     <h2>1. Siapkan data</h2>
-    <p class="muted" style="margin-top:4px">Urutan kolom: <b>NIS</b>, <b>Nama</b>, Kelas, Tingkat, Barung/Regu, HP orang tua, Kata sandi. Hanya NIS dan Nama yang wajib. Baris judul boleh ada atau tidak.</p>
+    <p class="muted" style="margin-top:4px">Kolom: <b>NIS</b>, <b>Nama</b>, L/P, Kelas, Tingkat, Barung/Regu, HP orang tua, Kata sandi. Hanya NIS dan Nama yang wajib. Paling mudah pakai baris judul seperti contoh format; tanpa baris judul, urutannya NIS, Nama, Kelas, Tingkat, Barung/Regu, HP, Kata sandi, L/P.</p>
     <ul class="muted" style="margin:8px 0 0 18px;font-size:.84rem">
       <li>Tingkat: <code>Mula</code>, <code>Bantu</code>, <code>Tata</code>, atau <code>Ramu</code> (boleh ditulis "Siaga Mula", "Penggalang Ramu").</li>
+      <li>L/P: <code>L</code> (laki-laki → Gudep 05.093 Putra) atau <code>P</code> (perempuan → Gudep 05.122 Putri).</li>
       <li>Kata sandi kosong akan memakai kata sandi awal di langkah 3.</li>
     </ul>
     <button class="btn kedua kecil" id="unduh-contoh" type="button" style="margin-top:10px">Unduh contoh format (CSV)</button>
@@ -44,6 +45,8 @@
     <h2>3. Pengaturan</h2>
     <div class="baris-form">
       <div><label for="sandi">Kata sandi awal</label><input id="sandi" minlength="6" placeholder="minimal 6 karakter" autocomplete="new-password"></div>
+      <div><label for="jk">Jenis kelamin bila kosong</label><select id="jk">
+        <option value="05.093">Laki-laki (Gudep 05.093 Putra)</option><option value="05.122">Perempuan (Gudep 05.122 Putri)</option></select></div>
       <div><label for="tingkat">Tingkat bila kosong</label><select id="tingkat">
         <optgroup label="Siaga"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></optgroup>
         <optgroup label="Penggalang"><option value="ramu">Penggalang Ramu</option></optgroup></select></div>
@@ -60,13 +63,13 @@
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261118"></script>
+<script src="config.js?v=20261126"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
   const $=id=>document.getElementById(id);
   subNav($('subnav'),[['anggota.html','Siswa'],['impor_siswa.html','Impor'],['barung.html','Barung/Regu'],['pelantikan.html','Pelantikan']]);
-  $('sub').textContent=namaGudep(p.gudep);
+  $('sub').textContent=namaGudep(p.gudep); $('jk').value=p.gudep;
   let siswaAda=await ambilSiswa(p,{termasukNonaktif:true});
   let baris=[];
 
@@ -76,8 +79,8 @@
 
   /* ---------- Contoh format ---------- */
   $('unduh-contoh').onclick=()=>{
-    const isi=['NIS;Nama;Kelas;Tingkat;Barung/Regu;HP Orang Tua;Kata Sandi',
-      '1001;Andi Pratama;4A;Siaga Mula;Merah;081234567890;','1002;Siti Rahma;6B;Penggalang Ramu;Elang;;rahasia123'].join('\r\n');
+    const isi=['NIS;Nama;L/P;Kelas;Tingkat;Barung/Regu;HP Orang Tua;Kata Sandi',
+      '1001;Andi Pratama;L;4A;Siaga Mula;Merah;081234567890;','1002;Siti Rahma;P;6B;Penggalang Ramu;Melati;;rahasia123'].join('\r\n');
     const url=URL.createObjectURL(new Blob(['﻿'+isi],{type:'text/csv;charset=utf-8'}));
     const a=document.createElement('a');a.href=url;a.download='contoh-impor-siswa.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
@@ -113,7 +116,15 @@
   const KOLOM={nis:/^(nis|nisn|no\.?\s*induk|nomor\s*induk|nip)$/,nama:/^(nama|nama\s*lengkap|nama\s*siswa|nama\s*peserta\s*didik)$/,kelas:/^(kelas|rombel|rombongan\s*belajar)$/,
     tingkat:/^(tingkat|tingkatan|golongan|sku|sku\s*yang\s*ditempuh)$/,barung:/^(barung|regu|barung\s*\/\s*regu|kelompok)$/,
     hp_ortu:/^(hp|no\.?\s*hp|hp\s*orang\s*tua|no\.?\s*hp\s*orang\s*tua|hp\s*ortu|telepon|no\.?\s*telp|wa|whatsapp)$/,kata_sandi:/^(kata\s*sandi|sandi|password)$/};
-  const URUTAN=['nis','nama','kelas','tingkat','barung','hp_ortu','kata_sandi'];
+  KOLOM.jk=/^(l\s*\/\s*p|lp|jk|jenis\s*kelamin|kelamin|gender|sex)$/;
+  const URUTAN=['nis','nama','kelas','tingkat','barung','hp_ortu','kata_sandi','jk'];
+  // L/laki-laki/putra -> Gudep Putra; P/perempuan/putri -> Gudep Putri; kosong -> pilihan di langkah 3
+  function gudepDari(v){
+    v=String(v||'').trim().toLowerCase(); if(!v) return $('jk').value;
+    if(/^(l|lk|laki|laki-laki|laki laki|pria|putra|m|male)$/.test(v)) return '05.093';
+    if(/^(p|pr|perempuan|wanita|putri|f|female)$/.test(v)) return '05.122';
+    return null;
+  }
   function petakan(rows){
     rows=rows.map(r=>r.map(c=>String(c??'').trim())).filter(r=>r.some(Boolean));
     if(!rows.length) return [];
@@ -133,14 +144,19 @@
     const petaNis=new Map(siswaAda.map(s=>[String(s.nis_nip),s])), dipakai=new Set();
     baris=petakan(rows).map((d,i)=>{
       const nis=d.nis.replace(/^'/,'').replace(/\.0+$/,'').replace(/\s/g,'');
-      const r={no:i+1,nis,nama:d.nama.replace(/\s+/g,' '),kelas:d.kelas.replace(/^kelas\s*/i,'').slice(0,5),tingkat:tingkatDari(d.tingkat),
+      const r={no:i+1,nis,nama:d.nama.replace(/\s+/g,' '),kelas:d.kelas.replace(/^kelas\s*/i,'').slice(0,5),tingkat:tingkatDari(d.tingkat),gudep:gudepDari(d.jk),
         barung:d.barung.slice(0,20),hp_ortu:d.hp_ortu.replace(/[^\d+]/g,'').slice(0,16),kata_sandi:d.kata_sandi,status:'baru',alasan:''};
       if(!/^\d{1,20}$/.test(nis)) {r.status='galat';r.alasan=nis?'NIS harus angka':'NIS kosong'}
       else if(!r.nama) {r.status='galat';r.alasan='Nama kosong'}
       else if(!r.tingkat) {r.status='galat';r.alasan=`Tingkat "${d.tingkat}" tidak dikenal`}
+      else if(!r.gudep) {r.status='galat';r.alasan=`Jenis kelamin "${d.jk}" tidak dikenal (isi L atau P)`}
       else if(dipakai.has(nis)) {r.status='galat';r.alasan='NIS ganda di data ini'}
       else if(r.kata_sandi&&r.kata_sandi.length<6) {r.status='galat';r.alasan='Kata sandi kurang dari 6 karakter'}
-      else if(petaNis.has(nis)) {r.status='ada';r.id=petaNis.get(nis).id}
+      else if(petaNis.has(nis)){
+        const lama=petaNis.get(nis);
+        if(d.jk.trim()&&lama.gudep&&lama.gudep!==r.gudep){r.status='galat';r.alasan=`Sudah terdaftar di ${namaGudep(lama.gudep)}; jenis kelamin tidak bisa diubah lewat impor`}
+        else {r.status='ada';r.id=lama.id;r.gudep=lama.gudep||r.gudep}
+      }
       dipakai.add(nis); return r;
     });
     gambar();
@@ -150,14 +166,14 @@
     const n=s=>baris.filter(r=>r.status===s).length, perbarui=$('perbarui').checked;
     $('ringkas').innerHTML=`<span class="pil hijau">${n('baru')} baru</span><span class="pil">${n('ada')} sudah ada${perbarui?' (diperbarui)':' (dilewati)'}</span>${n('galat')?`<span class="pil merah">${n('galat')} bermasalah</span>`:''}`;
     const label={baru:['Baru','hijau'],ada:[perbarui?'Diperbarui':'Dilewati',''],galat:['Bermasalah','merah'],ok:['Tersimpan','hijau'],gagal:['Gagal','merah']};
-    $('tabel').innerHTML=`<thead><tr><th>#</th><th>NIS</th><th>Nama</th><th>Kelas</th><th>Tingkat</th><th>Barung/Regu</th><th>HP ortu</th><th>Status</th></tr></thead><tbody>`+
-      baris.map(r=>`<tr><td>${r.no}</td><td>${esc(r.nis)}</td><td style="text-align:left">${esc(r.nama)}</td><td>${esc(r.kelas)}</td><td>${r.tingkat?esc(TINGKAT_PENDEK[r.tingkat]):'—'}</td>
+    $('tabel').innerHTML=`<thead><tr><th>#</th><th>NIS</th><th>Nama</th><th>L/P</th><th>Kelas</th><th>Tingkat</th><th>Barung/Regu</th><th>HP ortu</th><th>Status</th></tr></thead><tbody>`+
+      baris.map(r=>`<tr><td>${r.no}</td><td>${esc(r.nis)}</td><td style="text-align:left">${esc(r.nama)}</td><td>${r.gudep==='05.122'?'P':r.gudep==='05.093'?'L':'—'}</td><td>${esc(r.kelas)}</td><td>${r.tingkat?esc(TINGKAT_PENDEK[r.tingkat]):'—'}</td>
         <td>${esc(r.barung)}</td><td>${esc(r.hp_ortu)}</td><td><span class="pil ${label[r.status][1]}">${label[r.status][0]}</span>${r.alasan?`<div class="muted" style="white-space:normal;max-width:200px">${esc(r.alasan)}</div>`:''}</td></tr>`).join('')+'</tbody>';
     const jumlah=n('baru')+(perbarui?n('ada'):0);
     $('impor').disabled=!jumlah; $('impor').textContent=jumlah?`Impor ${jumlah} siswa`:'Tidak ada yang bisa diimpor';
   }
   $('teks').addEventListener('input',()=>periksa(bacaTeks($('teks').value)));
-  $('perbarui').onchange=gambar; $('tingkat').onchange=()=>{ if(!$('panel-tempel').hidden) periksa(bacaTeks($('teks').value)); else if(barisMentah) periksa(barisMentah) };
+  $('perbarui').onchange=gambar; $('tingkat').onchange=$('jk').onchange=()=>{ if(!$('panel-tempel').hidden) periksa(bacaTeks($('teks').value)); else if(barisMentah) periksa(barisMentah) };
   let barisMentah=null;
   $('file').addEventListener('change',async()=>{
     const f=$('file').files[0]; if(!f) return; $('info-file').textContent='Membaca file…';
@@ -183,7 +199,7 @@
     for(let i=0;i<baru.length;i+=20){
       const kelompok=baru.slice(i,i+20);
       try{
-        const {hasil}=await kelolaAkun({aksi:'massal',daftar:kelompok.map(r=>({nis:r.nis,nama:r.nama,kelas:r.kelas||null,tingkat:r.tingkat,barung:r.barung||null,hp_ortu:r.hp_ortu||null,kata_sandi:r.kata_sandi||sandi}))});
+        const {hasil}=await kelolaAkun({aksi:'massal',daftar:kelompok.map(r=>({nis:r.nis,nama:r.nama,gudep:r.gudep,kelas:r.kelas||null,tingkat:r.tingkat,barung:r.barung||null,hp_ortu:r.hp_ortu||null,kata_sandi:r.kata_sandi||sandi}))});
         hasil.forEach(h=>{const r=kelompok.find(x=>x.nis===String(h.nis));if(r){r.status=h.ok?'ok':'gagal';r.alasan=h.ok?'':h.error}});
       }catch(e){kelompok.forEach(r=>{r.status='gagal';r.alasan=e.message})}
       selesai+=kelompok.length; maju(); gambar();
