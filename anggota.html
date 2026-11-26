@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Anggota — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261118">
+<link rel="stylesheet" href="style.css?v=20261126">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -31,6 +31,9 @@
       <div><label for="f-kelas">Kelas</label><input id="f-kelas" maxlength="5" placeholder="mis. 3A"></div>
     </div>
     <label for="f-nama">Nama lengkap</label><input id="f-nama" required maxlength="80">
+    <div id="baris-jk"><label for="f-jk">Jenis kelamin</label>
+      <select id="f-jk"><option value="05.093">Laki-laki — Gudep 05.093 Putra</option><option value="05.122">Perempuan — Gudep 05.122 Putri</option></select>
+      <p class="muted" id="f-jk-info" style="margin-top:4px" hidden></p></div>
     <div class="baris-form">
       <div><label for="f-tingkat">SKU yang ditempuh</label><select id="f-tingkat"><optgroup label="Siaga"><option value="mula">Siaga Mula</option><option value="bantu">Siaga Bantu</option><option value="tata">Siaga Tata</option></optgroup><optgroup label="Penggalang"><option value="ramu">Penggalang Ramu</option></optgroup></select></div>
       <div><label for="f-barung">Barung / Regu</label><input id="f-barung" maxlength="20" placeholder="mis. Merah" list="daftar-barung"><datalist id="daftar-barung"></datalist></div>
@@ -51,7 +54,7 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261118"></script>
+<script src="config.js?v=20261126"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
@@ -87,6 +90,7 @@
     $('f-sandi-info').textContent=s?'Kosongkan bila tidak ingin mengubah kata sandi siswa.':'Siswa masuk dengan NIS dan kata sandi ini.';
     $('zona-hapus').hidden=!s; $('zona-hapus').open=false; $('f-konfirmasi').value=''; $('f-hapus').disabled=true;
     $('f-nama').value=s?.nama||''; $('f-kelas').value=s?.kelas||''; $('f-tingkat').value=s?.tingkat||'mula';
+    $('baris-jk').hidden=!!s; $('f-jk').value=p.gudep; infoJk();
     $('f-barung').value=s?.barung||''; $('f-hp').value=s?.hp_ortu||''; $('f-aktif').checked=s?s.aktif!==false:true;
     $('f-sandi').required=!s; $('f-sandi').value=''; $('baris-aktif').hidden=!s;
     $('f-pesan').hidden=true; dlg.showModal(); $(s?'f-nama':'f-nis').focus();
@@ -104,6 +108,13 @@
     catch(err){pesan.textContent='Gagal menghapus: '+err.message;pesan.hidden=false;b.disabled=false}
     finally{b.textContent='Hapus akun permanen'}
   };
+  // Siswa laki-laki masuk Gudep Putra, perempuan masuk Gudep Putri
+  function infoJk(){
+    const g=$('f-jk').value, lain=g!==p.gudep;
+    $('f-jk-info').hidden=!lain;
+    $('f-jk-info').textContent=lain?`Siswa ini masuk ke ${namaGudep(g)} dan tampil di daftar pembina Gudep itu, bukan di daftar Anda.`:'';
+  }
+  $('f-jk').onchange=infoJk;
   $('tambah').onclick=()=>buka();
   $('batal').onclick=()=>dlg.close();
   box.addEventListener('click',e=>{const b=e.target.closest('[data-edit]');if(b)buka(siswa.find(s=>s.id===b.dataset.edit))});
@@ -125,8 +136,11 @@
         if(sandi) await kelolaAkun({aksi:'ubah_sandi',id:edit.id,kata_sandi:sandi});
       }else{
         // Akun login dibuat oleh Edge Function (memakai service_role di server, bukan di browser)
-        const {id}=await buatAkun({...data,role:'siswa',nis,kata_sandi:sandi});
-        if(data.foto&&id) await db.from('profil_pengguna').update({foto:data.foto}).eq('id',id);
+        const gudep=$('f-jk').value;
+        const {id}=await buatAkun({...data,role:'siswa',gudep,nis,kata_sandi:sandi});
+        // Foto hanya bisa disimpan untuk siswa Gudep sendiri (aturan akses)
+        if(data.foto&&id&&gudep===p.gudep) await db.from('profil_pengguna').update({foto:data.foto}).eq('id',id);
+        if(gudep!==p.gudep){dlg.close();toast(`Siswa ditambahkan ke ${namaGudep(gudep)}`);muat();return}
       }
       dlg.close(); toast(edit?'Data siswa diperbarui':'Siswa ditambahkan'); muat();
     }catch(err){

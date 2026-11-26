@@ -1,10 +1,12 @@
 // Edge Function: kelola akun login (membutuhkan service_role, jadi dijalankan di server).
-//   aksi "buat"        : pembina menambah siswa (Gudep pembina itu); mabigus menambah pembina
-//   aksi "massal"      : pembina mengimpor banyak siswa sekaligus (maks. 50 per panggilan)
+//   aksi "buat"        : pembina menambah siswa laki-laki (Gudep 05.093 Putra) atau perempuan (Gudep 05.122 Putri);
+//                        mabigus menambah pembina
+//   aksi "massal"      : pembina mengimpor banyak siswa sekaligus (maks. 50 per panggilan), Gudep per siswa
 //   aksi "ubah_nomor"  : ganti NIS/NIP (alamat login) siswa/pembina
 //   aksi "ubah_sandi"  : atur ulang kata sandi
 //   aksi "hapus"       : hapus akun beserta datanya
-// Pembina hanya boleh mengelola siswa di Gudep-nya; mabigus boleh mengelola pembina dan siswa.
+// Pembina boleh menambah siswa ke kedua Gudep, tetapi mengubah/menghapus hanya siswa di Gudep-nya;
+// mabigus boleh mengelola pembina dan siswa.
 // Pasang/perbarui: Edge Functions > buat-akun > tempel kode ini > Deploy
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
@@ -50,7 +52,8 @@ Deno.serve(async (req) => {
       if (role === 'pembina' && saya!.role !== 'mabigus') throw new Galat('Hanya mabigus yang boleh menambah pembina.', 403);
       const nomor = String(d.nis ?? '').trim();
       const nama = teks(d.nama, 80);
-      const gudep = role === 'siswa' ? saya!.gudep : d.gudep;
+      // Siswa: Gudep sesuai jenis kelamin yang dipilih (Putra/Putri); bila kosong, Gudep pembina
+      const gudep = role === 'siswa' ? (GUDEP.includes(d.gudep as string) ? d.gudep : saya!.gudep) : d.gudep;
       if (!nomorValid(nomor)) throw new Galat((role === 'siswa' ? 'NIS' : 'NIP') + ' harus berupa angka.');
       if (!nama) throw new Galat('Nama wajib diisi.');
       if (!GUDEP.includes(gudep as string)) throw new Galat('Pilih Gudep yang benar.');

@@ -3,7 +3,7 @@
 Aplikasi administrasi kepramukaan SDN 3 Boloh (Gudep 05.093 Putra & 05.122 Putri): absensi, iuran dan kas, uji SKU, data anggota, agenda, dan rekap bulanan.
 
 ## Peran
-- **Pembina**: absen, iuran, kas keluar, uji SKU, tambah/ubah butir SKU, tambah/ubah/hapus siswa, impor siswa dari Excel/CSV, lihat barung, ajukan pelantikan, agenda, rekap Gudep-nya.
+- **Pembina**: absen, iuran, kas keluar, uji SKU, tambah/ubah butir SKU, tambah siswa laki-laki (Gudep Putra) maupun perempuan (Gudep Putri) secara manual atau impor Excel/CSV (kolom L/P), ubah/hapus siswa Gudep-nya, lihat barung, ajukan pelantikan, agenda, rekap Gudep-nya.
 - **Mabigus**: tambah/ubah/hapus pembina, lihat barung semua Gudep, setujui atau tolak pelantikan golongan, agenda, rekap semua Gudep.
 - **Siswa**: kehadiran, iuran, tingkatan, dan progres SKU miliknya sendiri.
 
