@@ -158,6 +158,15 @@ async function ambilSiswa(p,{termasukNonaktif=false}={}){
   return termasukNonaktif?data:data.filter(s=>s.aktif!==false);
 }
 
+// Siswa Gudep sendiri, ditambah siswa kelas yang dipegang guru kelas dari Gudep lain (putra & putri)
+async function ambilSiswaKelasSaya(p){
+  const sendiri=await ambilSiswa(p), k=normKelas(p.kelas);
+  if(p.role!=='pembina'||!k) return sendiri;
+  const {data}=await db.from('profil_pengguna').select('*').eq('role','siswa').neq('gudep',p.gudep).order('nama');
+  return [...sendiri,...(data||[]).filter(s=>s.aktif!==false&&normKelas(s.kelas)===k)].sort((a,b)=>a.nama.localeCompare(b.nama,'id'));
+}
+const urutKelas=(a,b)=>a==='—'?1:b==='—'?-1:a.localeCompare(b,'id',{numeric:true});
+
 /* Watermark hak cipta di setiap halaman */
 document.addEventListener('DOMContentLoaded',()=>{
   if(document.querySelector('.hak-cipta')) return;

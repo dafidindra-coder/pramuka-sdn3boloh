@@ -13,6 +13,11 @@ Guru kelas mencatat iuran semua siswa di kelasnya, putra maupun putri (kedua Gud
 Uang iuran disetorkan guru kelas lewat Iuran › Setoran ke kas Gudep siswanya (Putra atau Putri), lalu dikonfirmasi pembina Gudep itu atau mabigus.
 Kas Gudep = setoran yang sudah diterima − pengeluaran; sisanya tampil sebagai "masih di guru kelas".
 
+## Absensi dan rekap per kelas
+Di menu Absen, pilih kelas untuk mengabsen per kelas. Guru kelas otomatis melihat kelasnya dan boleh mengabsen semua siswa kelas itu (putra dan putri);
+pembina tetap bisa mengabsen siswa Gudep-nya. Menu Rekap menampilkan **rekap per kelas** (jumlah siswa L/P, latihan, H/S/I/A, % hadir, iuran masuk)
+yang bisa diunduh sebagai CSV; ketuk nama kelas untuk melihat rekap siswanya. Aturan aksesnya ada di `supabase/absensi_per_kelas.sql`.
+
 Setiap pengguna punya foto profil yang bisa diganti sendiri dari Beranda.
 
 Golongan yang didukung: **Siaga** (Mula, Bantu, Tata; berkelompok dalam barung) dan **Penggalang Ramu** (berkelompok dalam regu).
