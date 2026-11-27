@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Rekap — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261127">
+<link rel="stylesheet" href="style.css?v=20261127c">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -20,6 +20,7 @@
   <div class="aksi tak-cetak">
     <button class="btn" id="unduh" type="button">Unduh Excel (CSV)</button>
     <button class="btn kedua" id="cetak" type="button">Cetak / simpan PDF</button>
+    <a class="btn kedua" id="lap-absen" href="laporan_absensi.html">Laporan absensi per kelas (PDF)</a>
   </div>
   <section id="bagian-kelas">
     <div class="kepala-bagian"><h2>Rekap per kelas</h2><button class="btn kedua kecil tak-cetak" id="unduh-kelas" type="button">Unduh CSV</button></div>
@@ -30,8 +31,8 @@
   <p class="muted">H/S/I/A = jumlah Hadir, Sakit, Izin, Alfa pada bulan terpilih. Iuran = bulan lunas dari Januari sampai bulan terpilih. Ketuk nama kelas untuk melihat siswanya.</p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261127"></script>
-<script src="sku.js?v=20261127"></script>
+<script src="config.js?v=20261127c"></script>
+<script src="sku.js?v=20261127c"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
@@ -129,6 +130,10 @@
   };
   $('tabel-kelas').addEventListener('click',e=>{const b=e.target.closest('[data-kelas]');if(!b)return;$('kelas').value=b.dataset.kelas;muat();window.scrollTo({top:0,behavior:'smooth'})});
   $('cetak').onclick=()=>window.print();
+  // Tautan laporan absensi membawa bulan, tahun, kelas, dan Gudep yang sedang dipilih
+  $('lap-absen').addEventListener('click',e=>{e.preventDefault();
+    const q=new URLSearchParams({bln:$('bln').value,thn:$('thn').value,kelas:$('kelas').value,gudep:p.role==='mabigus'?$('gudep').value:''});
+    location.href='laporan_absensi.html?'+q});
   $('gudep').addEventListener('change',isiKelas);
   ['bln','thn','gudep','kelas'].forEach(id=>$(id).addEventListener('change',muat));
   muat();

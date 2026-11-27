@@ -79,8 +79,8 @@ function renderNav(p){
     siswa:[]
   }[p.role]||[];
   // Halaman turunan menyalakan menu induknya (mis. Barung & Pelantikan ada di bawah Anggota untuk pembina)
-  const induk=p.role==='pembina'?({'barung.html':'anggota.html','pelantikan.html':'anggota.html','impor_siswa.html':'anggota.html','kelola_sku.html':'uji_sku.html','rekap.html':'dashboard.html'}[hal]||hal)
-    :({'kelola_sku.html':'dashboard.html'}[hal]||hal);
+  const induk=p.role==='pembina'?({'barung.html':'anggota.html','pelantikan.html':'anggota.html','impor_siswa.html':'anggota.html','kelola_sku.html':'uji_sku.html','rekap.html':'dashboard.html','laporan_absensi.html':'absensi.html'}[hal]||hal)
+    :({'kelola_sku.html':'dashboard.html','laporan_absensi.html':'rekap.html'}[hal]||hal);
   const n=document.getElementById('nav');
   n.className='atas';
   n.innerHTML=`<img src="logo.png" alt="" class="logo-kecil"><div class="judul-app"><b>Pramuka SDN 3 Boloh</b><span>${esc(p.nama)} · ${esc({mabigus:'Mabigus',pembina:'Pembina',siswa:'Siswa'}[p.role])}</span></div>
