@@ -262,9 +262,12 @@ create policy "mabigus ubah pembina" on public.profil_pengguna for update to aut
 -- absensi, iuran, pencapaian SKU: dibaca siswa ybs/pembinanya/mabigus, diubah pembinanya
 drop policy if exists "absensi baca"  on public.absensi_mingguan;
 drop policy if exists "absensi tulis" on public.absensi_mingguan;
-create policy "absensi baca"  on public.absensi_mingguan for select to authenticated using (public.pramuka_boleh_lihat(siswa_id));
+-- Absensi diisi pembina Gudep siswa atau guru kelas siswa (putra & putri di kelasnya)
+create policy "absensi baca"  on public.absensi_mingguan for select to authenticated
+  using (public.pramuka_boleh_lihat(siswa_id) or public.pramuka_wali_kelas_dari(siswa_id));
 create policy "absensi tulis" on public.absensi_mingguan for all    to authenticated
-  using (public.pramuka_pembina_dari(siswa_id)) with check (public.pramuka_pembina_dari(siswa_id));
+  using      (public.pramuka_pembina_dari(siswa_id) or public.pramuka_wali_kelas_dari(siswa_id))
+  with check (public.pramuka_pembina_dari(siswa_id) or public.pramuka_wali_kelas_dari(siswa_id));
 
 drop policy if exists "iuran baca"  on public.iuran_bulanan;
 drop policy if exists "iuran tulis" on public.iuran_bulanan;

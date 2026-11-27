@@ -4,7 +4,7 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Rekap — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261126">
+<link rel="stylesheet" href="style.css?v=20261127">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
@@ -13,6 +13,7 @@
   <div class="baris-form tak-cetak">
     <div><label for="bln">Bulan</label><select id="bln"></select></div>
     <div><label for="thn">Tahun</label><input id="thn" type="number" inputmode="numeric"></div>
+    <div><label for="kelas">Kelas</label><select id="kelas"><option value="">Semua kelas</option></select></div>
     <div id="pilih-gudep" hidden><label for="gudep">Gudep</label><select id="gudep"><option value="">Semua Gudep</option><option value="05.093">05.093 Putra</option><option value="05.122">05.122 Putri</option></select></div>
   </div>
   <div class="grid" id="ringkasan"></div>
@@ -20,12 +21,17 @@
     <button class="btn" id="unduh" type="button">Unduh Excel (CSV)</button>
     <button class="btn kedua" id="cetak" type="button">Cetak / simpan PDF</button>
   </div>
+  <section id="bagian-kelas">
+    <div class="kepala-bagian"><h2>Rekap per kelas</h2><button class="btn kedua kecil tak-cetak" id="unduh-kelas" type="button">Unduh CSV</button></div>
+    <div class="geser"><table id="tabel-kelas"></table></div>
+  </section>
+  <h2 id="judul-siswa">Rekap per siswa</h2>
   <div class="geser"><table id="tabel"></table></div>
-  <p class="muted">H/S/I/A = jumlah Hadir, Sakit, Izin, Alfa pada bulan terpilih. Iuran = bulan lunas dari Januari sampai bulan terpilih.</p>
+  <p class="muted">H/S/I/A = jumlah Hadir, Sakit, Izin, Alfa pada bulan terpilih. Iuran = bulan lunas dari Januari sampai bulan terpilih. Ketuk nama kelas untuk melihat siswanya.</p>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261126"></script>
-<script src="sku.js?v=20261126"></script>
+<script src="config.js?v=20261127"></script>
+<script src="sku.js?v=20261127"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
@@ -34,14 +40,28 @@
   $('bln').innerHTML=NAMA_BULAN.map((n,i)=>`<option value="${i}">${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][i]}</option>`).join('');
   $('bln').value=sekarang.getMonth(); $('thn').value=sekarang.getFullYear();
   if(p.role==='mabigus') $('pilih-gudep').hidden=false;
-  const [semuaSiswa]=await Promise.all([ambilSiswa(p),muatMateriSku()]);
-  let baris=[];
+  // Pembina: siswa Gudep-nya + (bila guru kelas) siswa putra/putri kelasnya; mabigus: semua siswa
+  const [semuaSiswa]=await Promise.all([ambilSiswaKelasSaya(p),muatMateriSku()]);
+  const kelasSaya=normKelas(p.kelas), kelasDari=s=>normKelas(s.kelas)||'—';
+  // SKU siswa Gudep lain tidak bisa dibaca guru kelas (hanya pembina Gudep-nya)
+  const bisaSku=s=>p.role==='mabigus'||s.gudep===p.gudep;
+  let baris=[], barisKelas=[];
+  function isiKelas(){
+    const g=p.role==='mabigus'?$('gudep').value:'', lama=$('kelas').value;
+    const daftar=[...new Set(semuaSiswa.filter(s=>!g||s.gudep===g).map(kelasDari))].sort(urutKelas);
+    $('kelas').innerHTML='<option value="">Semua kelas</option>'+daftar.map(k=>`<option value="${esc(k)}">${k==='—'?'Tanpa kelas':'Kelas '+esc(k)}${k===kelasSaya?' (kelas Anda)':''}</option>`).join('');
+    $('kelas').value=daftar.includes(lama)?lama:'';
+  }
+  isiKelas();
 
   async function muat(){
-    const b=+$('bln').value, t=+$('thn').value, g=p.role==='mabigus'?$('gudep').value:p.gudep;
-    const siswa=semuaSiswa.filter(s=>!g||s.gudep===g), ids=siswa.map(s=>s.id);
+    const b=+$('bln').value, t=+$('thn').value, g=p.role==='mabigus'?$('gudep').value:'';
+    const kl=$('kelas').value;
+    const siswa=semuaSiswa.filter(s=>(!g||s.gudep===g)&&(!kl||kelasDari(s)===kl))
+      .sort((a,b)=>urutKelas(kelasDari(a),kelasDari(b))||a.nama.localeCompare(b.nama,'id')), ids=siswa.map(s=>s.id);
     const namaBln=$('bln').selectedOptions[0].textContent;
-    $('sub').textContent=namaGudep(g||null); $('judul').textContent=`Rekap ${namaBln} ${t}`;
+    $('sub').textContent=kl?(kl==='—'?'Tanpa kelas':'Kelas '+kl)+(p.role==='pembina'&&kl===kelasSaya?' · putra & putri':g?' · '+namaGudep(g):''):namaGudep(p.role==='mabigus'?(g||null):p.gudep)+(kelasSaya?' · Guru kelas '+kelasSaya:'');
+    $('judul').textContent=`Rekap ${namaBln} ${t}`;
     $('tabel').innerHTML='<tr><td><div class="kerangka" style="min-height:40px"></div></td></tr>';
     const awal=`${t}-${String(b+1).padStart(2,'0')}-01`, akhir=new Date(t,b+1,0).toLocaleDateString('en-CA');
     const kosong={data:[],error:null};
@@ -56,16 +76,32 @@
       const a=abs.data.filter(r=>r.siswa_id===s.id), n=k=>a.filter(r=>r.status===k).length;
       const r=iur.data.find(r=>r.siswa_id===s.id)||{}, lunas=BULAN.slice(0,b+1).filter(x=>r[x]).length;
       const tk=s.tingkat||'mula', pr=progresSku(new Set(sku.data.filter(x=>x.siswa_id===s.id).map(x=>x.kode_sku)))[tk];
-      return {nama:s.nama,nis:s.nis_nip,kelas:s.kelas||'',gudep:s.gudep,H:n('H'),S:n('S'),I:n('I'),A:n('A'),
-        pct:a.length?Math.round(n('H')/a.length*100):null,iuran:`${lunas}/${b+1}`,kurang:b+1-lunas,tingkat:TINGKAT[tk],sku:`${pr.lulus}/${pr.total}`};
+      return {nama:s.nama,nis:s.nis_nip,kelas:s.kelas||'',kl:kelasDari(s),gudep:s.gudep,H:n('H'),S:n('S'),I:n('I'),A:n('A'),
+        pct:a.length?Math.round(n('H')/a.length*100):null,lunas,iuran:`${lunas}/${b+1}`,kurang:b+1-lunas,tingkat:TINGKAT[tk],sku:bisaSku(s)?`${pr.lulus}/${pr.total}`:'—'};
     });
+    // Rekap per kelas
+    const pk=new Map();
+    for(const r of baris){
+      const x=pk.get(r.kl)||{kelas:r.kl,siswa:0,putra:0,putri:0,H:0,S:0,I:0,A:0,lunas:0,tgl:new Set()}; pk.set(r.kl,x);
+      x.siswa++; if(r.gudep==='05.093')x.putra++; else if(r.gudep==='05.122')x.putri++;
+      ['H','S','I','A'].forEach(k=>x[k]+=r[k]); x.lunas+=r.lunas;
+    }
+    const kelasSiswa=new Map(siswa.map(s=>[s.id,kelasDari(s)]));
+    abs.data.forEach(r=>{const x=pk.get(kelasSiswa.get(r.siswa_id));if(x)x.tgl.add(r.tanggal)});
+    barisKelas=[...pk.values()].sort((a,b)=>urutKelas(a.kelas,b.kelas)).map(x=>{const tot=x.H+x.S+x.I+x.A;
+      return {...x,latihan:x.tgl.size,pct:tot?Math.round(x.H/tot*100):null,iuranRp:x.lunas*IURAN_PER_BULAN,target:x.siswa*(b+1)}});
+    $('bagian-kelas').hidden=!!kl||!barisKelas.length; $('judul-siswa').textContent=kl?'Rekap siswa '+(kl==='—'?'tanpa kelas':'kelas '+kl):'Rekap per siswa';
+    $('tabel-kelas').innerHTML=`<thead><tr><th>Kelas</th><th>Siswa</th><th>Latihan</th><th>H</th><th>S</th><th>I</th><th>A</th><th>% Hadir</th><th>Iuran masuk</th></tr></thead><tbody>`+
+      barisKelas.map(x=>`<tr class="${x.kelas===kelasSaya?'baris-saya':''}"><td><button type="button" class="tautan" data-kelas="${esc(x.kelas)}">${x.kelas==='—'?'Tanpa kelas':esc(x.kelas)}</button></td>
+        <td>${x.siswa}<div class="muted">${x.putra} L · ${x.putri} P</div></td><td>${x.latihan}</td><td>${x.H}</td><td>${x.S}</td><td>${x.I}</td>
+        <td>${x.A?`<span class="pil ${x.A>=3?'merah':''}">${x.A}</span>`:0}</td><td>${x.pct??'—'}${x.pct!=null?'%':''}</td><td>${rupiah(x.iuranRp)}<div class="muted">${x.lunas}/${x.target} bulan</div></td></tr>`).join('')+'</tbody>';
     const hadir=baris.reduce((x,r)=>x+r.H,0), total=baris.reduce((x,r)=>x+r.H+r.S+r.I+r.A,0);
     const masuk=iur.data.reduce((x,r)=>x+BULAN.slice(0,b+1).filter(k=>r[k]).length,0);
     $('ringkasan').innerHTML=`<div class="card"><div class="label">Latihan</div><div class="stat">${latihan}</div><div class="muted">pertemuan di bulan ini</div></div>
       <div class="card"><div class="label">Kehadiran</div><div class="stat">${total?Math.round(hadir/total*100):0}%</div><div class="muted">${hadir} dari ${total} catatan</div></div>
       <div class="card"><div class="label">Iuran s.d. ${NAMA_BULAN[b]}</div><div class="stat">${rupiah(masuk*IURAN_PER_BULAN)}</div><div class="muted">${masuk} pembayaran bulanan</div></div>`;
     $('tabel').innerHTML=`<thead><tr><th>Nama</th><th>Kelas</th>${p.role==='mabigus'&&!g?'<th>Gudep</th>':''}<th>H</th><th>S</th><th>I</th><th>A</th><th>% Hadir</th><th>Iuran</th><th>Tingkatan</th><th>SKU</th></tr></thead><tbody>`+
-      (baris.length?baris.map(r=>`<tr><td>${esc(r.nama)}</td><td>${esc(r.kelas)}</td>${p.role==='mabigus'&&!g?`<td>${esc(GUDEP[r.gudep]||'')}</td>`:''}<td>${r.H}</td><td>${r.S}</td><td>${r.I}</td>
+      (baris.length?baris.map(r=>`<tr><td>${esc(r.nama)}</td><td>${esc(r.kelas)}${p.role==='pembina'&&r.gudep!==p.gudep?` <span class="pil">${r.gudep==='05.122'?'Putri':'Putra'}</span>`:''}</td>${p.role==='mabigus'&&!g?`<td>${esc(GUDEP[r.gudep]||'')}</td>`:''}<td>${r.H}</td><td>${r.S}</td><td>${r.I}</td>
         <td>${r.A?`<span class="pil ${r.A>=2?'merah':''}">${r.A}</span>`:0}</td><td>${r.pct??'—'}${r.pct!=null?'%':''}</td>
         <td>${r.kurang>=3?`<span class="pil kuning">${r.iuran}</span>`:r.iuran}</td><td>${esc(r.tingkat)}</td><td>${r.sku}</td></tr>`).join('')
         :'<tr><td colspan="11" style="text-align:center">Belum ada siswa.</td></tr>')+'</tbody>';
@@ -82,8 +118,19 @@
     document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     toast('File rekap diunduh');
   };
+  $('unduh-kelas').onclick=()=>{
+    const sel=v=>{v=String(v??'');return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+    const kolom=['Kelas','Siswa','Laki-laki','Perempuan','Latihan','Hadir','Sakit','Izin','Alfa','% Hadir','Iuran masuk (Rp)','Bulan lunas','Target bulan'];
+    const isi=[kolom,...barisKelas.map(x=>[x.kelas==='—'?'Tanpa kelas':x.kelas,x.siswa,x.putra,x.putri,x.latihan,x.H,x.S,x.I,x.A,x.pct??'',x.iuranRp,x.lunas,x.target])].map(x=>x.map(sel).join(';')).join('\r\n');
+    const url=URL.createObjectURL(new Blob(['\ufeff'+isi],{type:'text/csv;charset=utf-8'}));
+    const a=document.createElement('a'); a.href=url; a.download=`rekap-kelas-${$('thn').value}-${String(+$('bln').value+1).padStart(2,'0')}.csv`;
+    document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+    toast('File rekap kelas diunduh');
+  };
+  $('tabel-kelas').addEventListener('click',e=>{const b=e.target.closest('[data-kelas]');if(!b)return;$('kelas').value=b.dataset.kelas;muat();window.scrollTo({top:0,behavior:'smooth'})});
   $('cetak').onclick=()=>window.print();
-  ['bln','thn','gudep'].forEach(id=>$(id).addEventListener('change',muat));
+  $('gudep').addEventListener('change',isiKelas);
+  ['bln','thn','gudep','kelas'].forEach(id=>$(id).addEventListener('change',muat));
   muat();
 })();
 </script></body></html>
