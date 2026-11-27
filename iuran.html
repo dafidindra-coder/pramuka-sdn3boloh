@@ -4,12 +4,12 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Iuran &amp; Kas — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261127c">
+<link rel="stylesheet" href="style.css?v=20261127d">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
 <main>
-  <div><div class="label" id="sub"></div><h1>Iuran &amp; kas</h1></div>
+  <div class="kepala-bagian"><div><div class="label" id="sub"></div><h1>Iuran &amp; kas</h1></div><a class="btn kedua kecil" id="lap" href="laporan_iuran.html">Cetak PDF</a></div>
   <div class="tab" role="tablist">
     <button role="tab" id="tab-iuran" aria-selected="true" aria-controls="panel-iuran">Iuran</button>
     <button role="tab" id="tab-setoran" aria-selected="false" aria-controls="panel-setoran">Setoran</button>
@@ -61,7 +61,7 @@
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261127c"></script>
+<script src="config.js?v=20261127d"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
@@ -81,6 +81,8 @@
   const labelGudep=g=>g===p.gudep?'':' · '+(GUDEP[g]?'Gudep '+GUDEP[g]:namaGudep(g));
   const semuaKelas=[...new Set(siswa.map(s=>normKelas(s.kelas)||'—'))].sort((a,b)=>a.localeCompare(b,'id',{numeric:true}));
   let peta={};
+  // Laporan iuran PDF membawa tahun dan kelas yang sedang dipilih
+  $('lap').addEventListener('click',e=>{e.preventDefault();location.href='laporan_iuran.html?'+new URLSearchParams({thn:thn.value,kelas:pilihKelas.value})});
 
   /* ---- Tab ---- */
   const TAB=['iuran','setoran','kas'];
