@@ -4,12 +4,12 @@
 <meta name="theme-color" content="#5d4037">
 <link rel="manifest" href="manifest.json">
 <title>Absensi — Pramuka SDN 3 Boloh</title>
-<link rel="stylesheet" href="style.css?v=20261127">
+<link rel="stylesheet" href="style.css?v=20261127c">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head><body>
 <header id="nav"></header>
 <main>
-  <div class="kepala-bagian"><h1>Absensi mingguan</h1><a class="btn kedua kecil" href="rekap.html">Rekap</a></div>
+  <div class="kepala-bagian"><h1>Absensi mingguan</h1><div style="display:flex;gap:6px"><a class="btn kedua kecil" href="rekap.html">Rekap</a><a class="btn kedua kecil" id="lap" href="laporan_absensi.html">Cetak PDF</a></div></div>
   <div class="baris-form">
     <div><label for="tgl">Tanggal latihan</label><input type="date" id="tgl"></div>
     <div><label for="kelas">Kelas</label><select id="kelas"></select></div>
@@ -20,7 +20,7 @@
   <div id="daftar" style="display:flex;flex-direction:column;gap:10px"></div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=20261127"></script>
+<script src="config.js?v=20261127c"></script>
 <script>
 (async()=>{
   const p=await butuhLogin(['pembina']); if(!p) return;
@@ -80,6 +80,8 @@
     belum.forEach(s=>{peta[s.id]='H';tandai(box.querySelector(`.card[data-id="${CSS.escape(s.id)}"]`),'H')});
     perbaruiRingkas(); toast(`${belum.length} siswa ditandai Hadir`);
   });
+  document.getElementById('lap').addEventListener('click',e=>{e.preventDefault();const d=new Date(tgl.value||hariIni());
+    location.href='laporan_absensi.html?'+new URLSearchParams({bln:d.getMonth(),thn:d.getFullYear(),kelas:pilihKelas.value})});
   tgl.addEventListener('change',muat); pilihKelas.addEventListener('change',muat); muat();
 })();
 </script></body></html>

@@ -16,7 +16,9 @@ Kas Gudep = setoran yang sudah diterima − pengeluaran; sisanya tampil sebagai 
 ## Absensi dan rekap per kelas
 Di menu Absen, pilih kelas untuk mengabsen per kelas. Guru kelas otomatis melihat kelasnya dan boleh mengabsen semua siswa kelas itu (putra dan putri);
 pembina tetap bisa mengabsen siswa Gudep-nya. Menu Rekap menampilkan **rekap per kelas** (jumlah siswa L/P, latihan, H/S/I/A, % hadir, iuran masuk)
-yang bisa diunduh sebagai CSV; ketuk nama kelas untuk melihat rekap siswanya. Aturan aksesnya ada di `supabase/absensi_per_kelas.sql`.
+yang bisa diunduh sebagai CSV; ketuk nama kelas untuk melihat rekap siswanya.
+Laporan absensi per kelas (daftar hadir per tanggal latihan, lengkap dengan kop dan tanda tangan) bisa dicetak atau disimpan sebagai PDF
+lewat tombol "Cetak PDF" di menu Absen atau "Laporan absensi per kelas (PDF)" di menu Rekap. Aturan aksesnya ada di `supabase/absensi_per_kelas.sql`.
 
 Setiap pengguna punya foto profil yang bisa diganti sendiri dari Beranda.
 
