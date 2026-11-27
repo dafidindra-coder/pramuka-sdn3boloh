@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5d4037">
+<link rel="manifest" href="manifest.json">
+<title>Laporan Kas — Pramuka SDN 3 Boloh</title>
+<link rel="stylesheet" href="style.css?v=20261127e">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head><body>
+<header id="nav"></header>
+<main>
+  <div class="tak-cetak">
+    <div class="label">Kas Gudep</div><h1>Cetak laporan kas</h1>
+  </div>
+  <div class="baris-form tak-cetak">
+    <div><label for="periode">Periode</label><select id="periode"></select></div>
+    <div><label for="thn">Tahun</label><input id="thn" type="number" inputmode="numeric"></div>
+    <div id="pilih-gudep" hidden><label for="gudep">Gudep</label><select id="gudep"><option value="">Kedua Gudep</option><option value="05.093">05.093 Putra</option><option value="05.122">05.122 Putri</option></select></div>
+  </div>
+  <div class="baris-form tak-cetak">
+    <div><label for="ttd-kiri">Penanda tangan kiri</label><input id="ttd-kiri" maxlength="60" placeholder="Nama Kepala Sekolah / Mabigus"></div>
+    <div><label for="ttd-kanan">Penanda tangan kanan</label><input id="ttd-kanan" maxlength="60" placeholder="Nama Pembina / Bendahara"></div>
+  </div>
+  <div class="aksi tak-cetak">
+    <button class="btn" id="cetak" type="button">Cetak / simpan PDF</button>
+    <a class="btn kedua" id="kembali" href="iuran.html">Kembali ke Iuran</a>
+  </div>
+  <p class="muted tak-cetak">Pada jendela cetak, pilih printer <b>Simpan sebagai PDF</b>. Pemasukan kas = setoran iuran dari guru kelas yang sudah diterima; pengeluaran = catatan kas keluar.</p>
+  <div id="laporan"></div>
+</main>
+<style>
+  .tabel-lap td.uang{text-align:right;font-variant-numeric:tabular-nums}
+  .tabel-lap tr.saldo-awal td{font-style:italic;background:#fafafa}
+  .ringkas-lap{display:grid;grid-template-columns:repeat(4,1fr);margin-top:10px;border:1px solid #000}
+  .ringkas-lap div{padding:5px 8px;border-left:1px solid #000;line-height:1.35}
+  .ringkas-lap div:first-child{border-left:0}
+  .ringkas-lap b{display:block;font-size:.95rem}
+  @media print{@page{size:A4 portrait;margin:12mm}}
+  @media (max-width:520px){.ringkas-lap{grid-template-columns:1fr 1fr}.ringkas-lap div:nth-child(3){border-left:0}.ringkas-lap div:nth-child(n+3){border-top:1px solid #000}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js?v=20261127e"></script>
+<script>
+(async()=>{
+  const p=await butuhLogin(['pembina','mabigus']); if(!p) return;
+  const $=id=>document.getElementById(id);
+  const BULAN_PANJANG=['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const q=new URLSearchParams(location.search), sekarang=new Date();
+  $('periode').innerHTML='<option value="">Satu tahun penuh</option>'+BULAN_PANJANG.map((n,i)=>`<option value="${i}">${n}</option>`).join('');
+  $('periode').value=q.has('periode')?q.get('periode'):String(sekarang.getMonth()); $('thn').value=q.get('thn')||sekarang.getFullYear();
+  if(p.role==='mabigus'){$('kembali').href='rekap.html';$('kembali').textContent='Kembali ke Rekap';$('pilih-gudep').hidden=false;$('gudep').value=q.get('gudep')||''}
+  const simpan=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}, ambil=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+  $('ttd-kiri').value=ambil('lap-ttd-kiri')||(p.role==='mabigus'?p.nama:'');
+  $('ttd-kanan').value=ambil('lap-kas-ttd-kanan')||(p.role==='pembina'?p.nama:'');
+
+  const tglPanjang=d=>{const [y,m,h]=d.split('-');return `${+h} ${BULAN_PANJANG[m-1]} ${y}`};
+  const uang=v=>v<0?'−'+rupiah(-v):rupiah(v); // saldo minus ditulis −Rp ...
+  const tglPendek=d=>`${d.slice(8)}/${d.slice(5,7)}/${d.slice(0,4)}`;
+  async function muat(){
+    const t=+$('thn').value, per=$('periode').value, box=$('laporan');
+    const daftarGudep=p.role==='mabigus'?($('gudep').value?[$('gudep').value]:['05.093','05.122']):[p.gudep];
+    const awal=per===''?`${t}-01-01`:`${t}-${String(+per+1).padStart(2,'0')}-01`;
+    const akhir=per===''?`${t}-12-31`:new Date(t,+per+1,0).toLocaleDateString('en-CA');
+    const namaPeriode=per===''?`Tahun ${t}`:`${BULAN_PANJANG[+per]} ${t}`;
+    box.innerHTML='<div class="kerangka" style="min-height:300px"></div>';
+    // Semua transaksi sampai akhir periode; yang sebelum periode menjadi saldo awal
+    const [str,klr]=await Promise.all([
+      db.from('setoran_iuran').select('gudep,kelas,tanggal,jumlah,status,keterangan').in('gudep',daftarGudep).lte('tanggal',akhir).order('tanggal'),
+      db.from('kas_keluar').select('gudep,tanggal,keterangan,jumlah').in('gudep',daftarGudep).lte('tanggal',akhir).order('tanggal')]);
+    if(str.error||klr.error){tampilError(box,'Data kas gagal dimuat',str.error||klr.error);return}
+    box.innerHTML=daftarGudep.map(g=>{
+      const masuk=str.data.filter(r=>r.gudep===g&&r.status==='diterima'), keluar=klr.data.filter(r=>r.gudep===g);
+      const sebelum=masuk.filter(r=>r.tanggal<awal).reduce((n,r)=>n+r.jumlah,0)-keluar.filter(r=>r.tanggal<awal).reduce((n,r)=>n+r.jumlah,0);
+      const transaksi=[...masuk.filter(r=>r.tanggal>=awal).map(r=>({tanggal:r.tanggal,ket:`Setoran iuran kelas ${normKelas(r.kelas)||r.kelas}${r.keterangan?' — '+r.keterangan:''}`,masuk:r.jumlah,keluar:0})),
+        ...keluar.filter(r=>r.tanggal>=awal).map(r=>({tanggal:r.tanggal,ket:r.keterangan,masuk:0,keluar:r.jumlah}))]
+        .sort((a,b)=>a.tanggal.localeCompare(b.tanggal)||b.masuk-a.masuk);
+      let saldo=sebelum;
+      const baris=transaksi.map((r,i)=>{saldo+=r.masuk-r.keluar;return `<tr><td>${i+1}</td><td>${tglPendek(r.tanggal)}</td><td class="nama">${esc(r.ket)}</td>
+        <td class="uang">${r.masuk?rupiah(r.masuk):''}</td><td class="uang">${r.keluar?rupiah(r.keluar):''}</td><td class="uang">${uang(saldo)}</td></tr>`}).join('');
+      const totMasuk=transaksi.reduce((n,r)=>n+r.masuk,0), totKeluar=transaksi.reduce((n,r)=>n+r.keluar,0);
+      const menunggu=str.data.filter(r=>r.gudep===g&&r.status!=='diterima'&&r.tanggal>=awal).reduce((n,r)=>n+r.jumlah,0);
+      return `<section class="lembar">
+        <div class="kop"><img src="logo.png" alt=""><div><b>GERAKAN PRAMUKA</b><br>SD NEGERI 3 BOLOH<br><span class="kecil">Gudep ${esc(g)} ${esc(GUDEP[g]||'')}</span></div><img src="logo.png" alt="" style="visibility:hidden"></div>
+        <div class="judul-lap">LAPORAN KAS GUDEP</div>
+        <div class="meta-lap"><span>Gudep: <b>${esc(g)} ${esc(GUDEP[g]||'')}</b></span><span>Periode: <b>${esc(namaPeriode)}</b></span><span>${tglPanjang(awal)} – ${tglPanjang(akhir)}</span></div>
+        <table class="tabel-lap">
+          <thead><tr><th>No</th><th>Tanggal</th><th>Uraian</th><th>Pemasukan</th><th>Pengeluaran</th><th>Saldo</th></tr></thead>
+          <tbody><tr class="saldo-awal"><td></td><td>${tglPendek(awal)}</td><td class="nama">Saldo awal</td><td></td><td></td><td class="uang">${uang(sebelum)}</td></tr>
+            ${baris||'<tr><td colspan="6">Tidak ada transaksi pada periode ini.</td></tr>'}</tbody>
+          <tfoot><tr><td colspan="3" style="text-align:right">Jumlah</td><td class="uang">${rupiah(totMasuk)}</td><td class="uang">${rupiah(totKeluar)}</td><td class="uang">${uang(sebelum+totMasuk-totKeluar)}</td></tr></tfoot>
+        </table>
+        <div class="ringkas-lap">
+          <div>Saldo awal<b>${uang(sebelum)}</b></div>
+          <div>Pemasukan<b>${rupiah(totMasuk)}</b></div>
+          <div>Pengeluaran<b>${rupiah(totKeluar)}</b></div>
+          <div>Saldo akhir<b>${uang(sebelum+totMasuk-totKeluar)}</b></div>
+        </div>
+        <div class="ket-lap">${menunggu?`Setoran ${rupiah(menunggu)} pada periode ini masih menunggu konfirmasi dan belum dihitung sebagai kas. `:''}Pemasukan berasal dari setoran iuran guru kelas yang sudah diterima.</div>
+        <div class="ttd">
+          <div>Mengetahui,<br>Kepala Sekolah / Mabigus<div class="garis">${esc($('ttd-kiri').value)||'&nbsp;'.repeat(40)}</div></div>
+          <div>Boloh, ${tglPanjang(hariIni())}<br>Pembina / Bendahara<div class="garis">${esc($('ttd-kanan').value)||'&nbsp;'.repeat(40)}</div></div>
+        </div>
+      </section>`;
+    }).join('');
+    document.title=`Kas ${daftarGudep.length>1?'Gudep':'Gudep '+daftarGudep[0]} ${namaPeriode}`;
+  }
+  $('cetak').onclick=()=>window.print();
+  ['thn','periode','gudep'].forEach(id=>$(id).addEventListener('change',muat));
+  $('ttd-kiri').addEventListener('change',()=>{simpan('lap-ttd-kiri',$('ttd-kiri').value);muat()});
+  $('ttd-kanan').addEventListener('change',()=>{simpan('lap-kas-ttd-kanan',$('ttd-kanan').value);muat()});
+  muat();
+})();
+</script></body></html>

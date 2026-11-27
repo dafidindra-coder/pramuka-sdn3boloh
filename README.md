@@ -20,7 +20,9 @@ yang bisa diunduh sebagai CSV; ketuk nama kelas untuk melihat rekap siswanya.
 Laporan absensi per kelas (daftar hadir per tanggal latihan, lengkap dengan kop dan tanda tangan) bisa dicetak atau disimpan sebagai PDF
 lewat tombol "Cetak PDF" di menu Absen atau "Laporan absensi per kelas (PDF)" di menu Rekap.
 Laporan iuran per kelas (centang per bulan, jumlah, tunggakan, dan setoran ke kas) dicetak lewat "Cetak PDF" di menu Iuran
-atau "Laporan iuran per kelas (PDF)" di menu Rekap. Aturan aksesnya ada di `supabase/absensi_per_kelas.sql`.
+atau "Laporan iuran per kelas (PDF)" di menu Rekap.
+Laporan kas Gudep (buku kas: saldo awal, setoran diterima, pengeluaran, saldo akhir) per bulan atau setahun dicetak lewat
+Iuran › Kas › "Cetak laporan kas Gudep (PDF)" atau "Laporan kas Gudep (PDF)" di menu Rekap. Aturan aksesnya ada di `supabase/absensi_per_kelas.sql`.
 
 Setiap pengguna punya foto profil yang bisa diganti sendiri dari Beranda.
 
